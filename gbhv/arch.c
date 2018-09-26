@@ -10,7 +10,6 @@ SIZE_T ArchGetHostMSR(ULONG MsrAddress)
 	return __readmsr(MsrAddress);
 }
 
-
 /*
  * Returns TRUE if the CPU feature is present.
  */
@@ -20,5 +19,5 @@ BOOL ArchIsCPUFeaturePresent(INT32 FunctionId, INT32 SubFunctionId, INT32 CPUIDR
 
 	__cpuidex(CPUInfo, FunctionId, SubFunctionId);
 
-	return BitIsSet(CPUInfo[CPUIDRegister], FeatureBit);
+	return HvUtilBitIsSet(CPUInfo[CPUIDRegister], FeatureBit);
 }

@@ -16,7 +16,8 @@ BOOL HvInitializeAllProcessors()
 
 	if (!ArchIsCPUFeaturePresent(1, 0, 2, 5))
 	{
-		return UtilErrorStatus("VMX feature is not present on this processor.");
+		HvLogError("VMX feature is not present on this processor.");
+		return FALSE;
 	}
 
 	return TRUE;

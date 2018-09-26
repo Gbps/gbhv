@@ -30,9 +30,6 @@
     <ClCompile Include="vmm.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="bitfield.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="arch.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -48,9 +45,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="msr.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="bitfield.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="arch.h">

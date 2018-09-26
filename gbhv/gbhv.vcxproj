@@ -140,13 +140,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="arch.c" />
-    <ClCompile Include="bitfield.c" />
     <ClCompile Include="entry.c" />
     <ClCompile Include="util.c" />
     <ClCompile Include="vmm.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="bitfield.h" />
     <ClInclude Include="msr.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="vmm.h" />

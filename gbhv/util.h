@@ -1,5 +1,12 @@
 #pragma once
 
 #include <ntdef.h>
+#include <windef.h>
 
-NTSTATUS UtilErrorStatus(LPCSTR ErrorMessage, NTSTATUS Status);
+BOOL HvUtilBitIsSet(SIZE_T BitField, SIZE_T BitPosition);
+
+SIZE_T HvUtilBitSetBit(SIZE_T BitField, SIZE_T BitPosition);
+
+SIZE_T HvUtilBitClearBit(SIZE_T BitField, SIZE_T BitPosition);
+
+VOID HvLogError(LPCSTR ErrorMessage);

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ntdef.h>
+#include <windef.h>
 #include <intrin.h>
-#include "bitfield.h"
 
 SIZE_T ArchGetHostMSR(ULONG MsrAddress);
 
