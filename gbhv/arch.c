@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arch.h"
+#include "util.h"
 
 /**
  * Get an MSR by its address and convert it to the specified type.
