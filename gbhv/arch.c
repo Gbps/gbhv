@@ -93,6 +93,7 @@ VOID ArchEnableVmxe()
 	// Read back to verify
 	Register.Flags = __readcr4();
 
+	/*
 	DEBUG_PRINT_STRUCT_NAME(CR4);
 		DEBUG_PRINT_STRUCT_MEMBER(VirtualModeExtensions);
 		DEBUG_PRINT_STRUCT_MEMBER(ProtectedModeVirtualInterrupts);
@@ -113,5 +114,6 @@ VOID ArchEnableVmxe()
 		DEBUG_PRINT_STRUCT_MEMBER(SmepEnable);
 		DEBUG_PRINT_STRUCT_MEMBER(SmapEnable);
 		DEBUG_PRINT_STRUCT_MEMBER(ProtectionKeyEnable);
-		DEBUG_PRINT_STRUCT_MEMBER(Reserved4);
+		DEBUG_PRINT_STRUCT_MEMBER(Reserved4)
+	*/
 }

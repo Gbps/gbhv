@@ -41,6 +41,8 @@ BOOL HvInitializeAllProcessors()
 
 	HvUtilLog("Total Processor Count: %i", OsGetCPUCount());
 
+	// TODO: Move to other function
+
 	// Allocate array of processor contexts
 	PVMX_PROCESSOR_CONTEXT* ProcessorContexts = OsAllocateNonpagedMemory(OsGetCPUCount() * sizeof(PVMX_PROCESSOR_CONTEXT));
 
@@ -53,7 +55,7 @@ BOOL HvInitializeAllProcessors()
 			return FALSE;
 		}
 
-		HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx/0x%llx]", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
+		HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx]", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
 	}
 
 	// Generates an IPI that signals all processors to execute the broadcast function.
