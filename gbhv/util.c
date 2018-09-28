@@ -1,7 +1,6 @@
 
 #include "util.h"
 #include <stdarg.h>
-#include <wdm.h>
 
 /**
  * Check if a bit is set in the bit field.
@@ -16,7 +15,7 @@ BOOL HvUtilBitIsSet(SIZE_T BitField, SIZE_T BitPosition)
  */
 SIZE_T HvUtilBitSetBit(SIZE_T BitField, SIZE_T BitPosition)
 {
-	return BitField | (1UL << BitPosition);
+	return BitField | (1ULL << BitPosition);
 }
 
 /*
@@ -24,31 +23,56 @@ SIZE_T HvUtilBitSetBit(SIZE_T BitField, SIZE_T BitPosition)
  */
 SIZE_T HvUtilBitClearBit(SIZE_T BitField, SIZE_T BitPosition)
 {
-	return BitField & ~(1UL << BitPosition);
+	return BitField & ~(1ULL << BitPosition);
 }
 
 /*
  * Print a message to the kernel debugger.
  */
-VOID HvLog(LPCSTR MessageFormat, ...)
+VOID HvUtilLog(LPCSTR MessageFormat, ...)
 {
 	va_list ArgumentList;
 
 	va_start(ArgumentList, MessageFormat);
-	vDbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
+	vDbgPrintExWithPrefix("[*] ", DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
+	va_end(ArgumentList);
+}
+
+/*
+ * Print a debug message to the kernel debugger.
+ */
+VOID HvUtilLogDebug(LPCSTR MessageFormat, ...)
+{
+	va_list ArgumentList;
+
+	va_start(ArgumentList, MessageFormat);
+	vDbgPrintExWithPrefix("[DEBUG] ", DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
+	va_end(ArgumentList);
+}
+
+
+/*
+ * Print a success message to the kernel debugger.
+ */
+VOID HvUtilLogSuccess(LPCSTR MessageFormat, ...)
+{
+	va_list ArgumentList;
+
+	va_start(ArgumentList, MessageFormat);
+	vDbgPrintExWithPrefix("[+] ", DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
 	va_end(ArgumentList);
 }
 
 /*
  * Print an error to the kernel debugger with a format.
  */
-VOID HvLogError(LPCSTR ErrorMessage, ...)
+VOID HvUtilLogError(LPCSTR MessageFormat, ...)
 {
 	va_list ArgumentList;
 
-	HvLog("ERROR: ");
+	HvUtilLog("ERROR: ");
 
-	va_start(ArgumentList, ErrorMessage);
-	HvLog(ErrorMessage, ArgumentList);
+	va_start(ArgumentList, MessageFormat);
+	vDbgPrintExWithPrefix("[!] ", DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
 	va_end(ArgumentList);
 }

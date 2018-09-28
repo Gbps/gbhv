@@ -1,8 +1,6 @@
 #pragma once
 
-#include <ntdef.h>
-#include <windef.h>
-#include <intrin.h>
+#include "extern.h"
 
 SIZE_T ArchGetHostMSR(ULONG MsrAddress);
 

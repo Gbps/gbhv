@@ -42,6 +42,7 @@
     <Configuration>Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">Win32</Platform>
     <RootNamespace>gbhv</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -132,6 +133,24 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Link>
+      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+    </Link>
+    <ClCompile>
+      <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>./phnt/;./ia32-doc/out/;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Link>
+      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+    </Link>
+    <ClCompile>
+      <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>./phnt/;./ia32-doc/out/;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <Inf Include="gbhv.inf" />
   </ItemGroup>
@@ -141,11 +160,45 @@
   <ItemGroup>
     <ClCompile Include="arch.c" />
     <ClCompile Include="entry.c" />
+    <ClCompile Include="os_nt.c" />
     <ClCompile Include="util.c" />
     <ClCompile Include="vmm.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="extern.h" />
     <ClInclude Include="msr.h" />
+    <ClInclude Include="os.h" />
+    <ClInclude Include="phnt\ntdbg.h" />
+    <ClInclude Include="phnt\ntexapi.h" />
+    <ClInclude Include="phnt\ntgdi.h" />
+    <ClInclude Include="phnt\ntioapi.h" />
+    <ClInclude Include="phnt\ntkeapi.h" />
+    <ClInclude Include="phnt\ntldr.h" />
+    <ClInclude Include="phnt\ntlpcapi.h" />
+    <ClInclude Include="phnt\ntmisc.h" />
+    <ClInclude Include="phnt\ntmmapi.h" />
+    <ClInclude Include="phnt\ntnls.h" />
+    <ClInclude Include="phnt\ntobapi.h" />
+    <ClInclude Include="phnt\ntpebteb.h" />
+    <ClInclude Include="phnt\ntpfapi.h" />
+    <ClInclude Include="phnt\ntpnpapi.h" />
+    <ClInclude Include="phnt\ntpoapi.h" />
+    <ClInclude Include="phnt\ntpsapi.h" />
+    <ClInclude Include="phnt\ntregapi.h" />
+    <ClInclude Include="phnt\ntrtl.h" />
+    <ClInclude Include="phnt\ntsam.h" />
+    <ClInclude Include="phnt\ntseapi.h" />
+    <ClInclude Include="phnt\ntsmss.h" />
+    <ClInclude Include="phnt\nttmapi.h" />
+    <ClInclude Include="phnt\nttp.h" />
+    <ClInclude Include="phnt\ntwow64.h" />
+    <ClInclude Include="phnt\ntxcapi.h" />
+    <ClInclude Include="phnt\ntzwapi.h" />
+    <ClInclude Include="phnt\phnt.h" />
+    <ClInclude Include="phnt\phnt_ntdef.h" />
+    <ClInclude Include="phnt\phnt_windows.h" />
+    <ClInclude Include="phnt\subprocesstag.h" />
+    <ClInclude Include="phnt\winsta.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="vmm.h" />
     <ClInclude Include="vmx.h" />
