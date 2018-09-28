@@ -1,0 +1,3 @@
+[submodule "gbhv/ia32-doc"]
+	path = gbhv/ia32-doc
+	url = https://github.com/wbenny/ia32-doc.git
