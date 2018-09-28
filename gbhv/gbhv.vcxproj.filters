@@ -42,6 +42,9 @@
     <ClCompile Include="os_nt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vmx.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="vmm.h">

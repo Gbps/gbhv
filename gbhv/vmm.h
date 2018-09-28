@@ -4,11 +4,7 @@
 #include "arch.h"
 #include "util.h"
 #include "os.h"
-
-/*
- * Represents a VMXON region allocated for the processor to do internal state management.
- */
-typedef VOID VMXON_REGION, *PVMXON_REGION;
+#include "vmx.h"
 
 typedef struct _VMX_PROCESSOR_CONTEXT
 {

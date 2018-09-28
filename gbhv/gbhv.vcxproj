@@ -163,6 +163,7 @@
     <ClCompile Include="os_nt.c" />
     <ClCompile Include="util.c" />
     <ClCompile Include="vmm.c" />
+    <ClCompile Include="vmx.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="extern.h" />

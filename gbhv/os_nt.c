@@ -2,6 +2,11 @@
 #include "util.h"
 
 /*
+ * Pool tag for memory allocations.
+ */
+#define HV_POOL_TAG (ULONG)'vhbG'
+
+/*
  * Get the number of CPUs on the system
  */
 SIZE_T OsGetCPUCount()
@@ -73,4 +78,31 @@ PVOID OsAllocateNonpagedMemory(SIZE_T NumberOfBytes)
 VOID OsFreeNonpagedMemory(PVOID MemoryPointer)
 {
 	ExFreePoolWithTag(MemoryPointer, HV_POOL_TAG);
+}
+
+/*
+ * Convert a virtual address to a physical address.
+ */
+PPHYSVOID OsVirtualToPhysical(PVOID VirtualAddress)
+{
+	return (PPHYSVOID)MmGetPhysicalAddress(VirtualAddress).QuadPart;
+}
+
+/*
+ * Convert a physical address to a virtual address.
+ */
+PVOID OsPhysicalToVirtual(PPHYSVOID PhysicalAddressIn)
+{
+	PHYSICAL_ADDRESS PhysicalAddress;
+	PhysicalAddress.QuadPart = (ULONG64)PhysicalAddressIn;
+
+	return (PVOID)MmGetVirtualForPhysical(PhysicalAddress);
+}
+
+/*
+ * Zero out Length bytes of a region of memory.
+ */
+VOID OsZeroMemory(PVOID VirtualAddress, SIZE_T Length)
+{
+	RtlZeroMemory(VirtualAddress, Length);
 }

@@ -12,12 +12,12 @@
 #include <intrin.h>
 #include <ntifs.h>
 
+#pragma warning(push, 0)
+
 /*
  * PHNT is the library of reversed structures used by Process Hacker.
  */
-#pragma warning(push, 0)      
 #include "phnt/phnt.h"
-
 
 /*
  * IA32-doc has structures for the entire intel SDM... pretty insane tbh.
@@ -26,4 +26,12 @@
 
 #pragma warning(pop)
 
+/*
+ * Some additional types used by everything.
+ */
 typedef UINT32 BOOL;
+
+/*
+ * A physical address pointer
+ */
+typedef PVOID PPHYSVOID;

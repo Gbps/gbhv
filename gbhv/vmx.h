@@ -1,4 +1,24 @@
 #pragma once
+#include "extern.h"
+
+/*
+ * Represents a VMXON region allocated for the processor to do internal state management.
+ */
+typedef struct _VMXON_REGION
+{
+	/*
+	 * Initialize the version identifier in the VMXON region (the first 31 bits) with the VMCS revision identifier 
+	 * reported by capability MSRs. 
+	 * 
+	 * Clear bit 31 of the first 4 bytes of the VMXON region.
+	 */
+	UINT32 VmcsRevisionNumber;
+
+	/*
+	 * Unknown processor implemented data follows...
+	 */
+} VMXON_REGION, *PVMXON_REGION;
+
 
 /*
  * CPUID Function identifier to check if VMX is enabled.
@@ -14,12 +34,25 @@
  */
 #define CPUID_VMX_ENABLED_SUBFUNCTION 0
 
+ /*
+  * CPUID Register EAX.
+  */
+#define CPUID_REGISTER_EAX 0
+
+ /*
+  * CPUID Register EBX.
+  */
+#define CPUID_REGISTER_EBX 1
+
 /*
- * CPUID Register in CPUID result to check if VMX is enabled.
- *
- * CPUID.1:ECX.VMX[bit 5] = 1
+ * CPUID Register ECX.
  */
 #define CPUID_REGISTER_ECX 2
+
+ /*
+  * CPUID Register EDX.
+  */
+#define CPUID_REGISTER_EDX 3
 
 /*
  * CPUID VMX support enabled bit.
