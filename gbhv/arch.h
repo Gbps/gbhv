@@ -10,4 +10,9 @@ BOOL ArchIsCPUFeaturePresent(INT32 FunctionId, INT32 SubFunctionId, INT32 CPUIDR
 
 BOOL ArchIsVMXAvailable();
 
-IA32_VMX_BASIC_REGISTER ArchGetMSR_BasicVmxCapabilities();
+IA32_VMX_BASIC_REGISTER ArchGetBasicVmxCapabilities();
+
+VOID ArchEnableVmxe();
+
+#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
+#define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)

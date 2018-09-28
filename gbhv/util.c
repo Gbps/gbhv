@@ -70,8 +70,6 @@ VOID HvUtilLogError(LPCSTR MessageFormat, ...)
 {
 	va_list ArgumentList;
 
-	HvUtilLog("ERROR: ");
-
 	va_start(ArgumentList, MessageFormat);
 	vDbgPrintExWithPrefix("[!] ", DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, MessageFormat, ArgumentList);
 	va_end(ArgumentList);

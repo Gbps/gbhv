@@ -3,6 +3,7 @@
 #include "arch.h"
 #include "util.h"
 #include "vmx.h"
+#include "vmm.h"
 
 /**
  * Get an MSR by its address and convert it to the specified type.
@@ -52,26 +53,65 @@ BOOL ArchIsVMXAvailable()
  * 
  * Reporting Register of Basic VMX Capabilities.
  */
-IA32_VMX_BASIC_REGISTER ArchGetMSR_BasicVmxCapabilities()
+IA32_VMX_BASIC_REGISTER ArchGetBasicVmxCapabilities()
 {
 	IA32_VMX_BASIC_REGISTER Register;
 
 	Register.Flags = ArchGetHostMSR(IA32_VMX_BASIC);
 
-#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
-#define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)
-
 	DEBUG_PRINT_STRUCT_NAME(IA32_VMX_BASIC_REGISTER);
-	DEBUG_PRINT_STRUCT_MEMBER(VmcsRevisionId);
-	DEBUG_PRINT_STRUCT_MEMBER(MustBeZero);
-	DEBUG_PRINT_STRUCT_MEMBER(VmcsSizeInBytes);
-	DEBUG_PRINT_STRUCT_MEMBER(Reserved1);
-	DEBUG_PRINT_STRUCT_MEMBER(VmcsPhysicalAddressWidth);
-	DEBUG_PRINT_STRUCT_MEMBER(DualMonitorSupport);
-	DEBUG_PRINT_STRUCT_MEMBER(MemoryType);
-	DEBUG_PRINT_STRUCT_MEMBER(InsOutsReporting);
-	DEBUG_PRINT_STRUCT_MEMBER(VmxControls);
-	DEBUG_PRINT_STRUCT_MEMBER(Reserved2);
+		DEBUG_PRINT_STRUCT_MEMBER(VmcsRevisionId);
+		DEBUG_PRINT_STRUCT_MEMBER(MustBeZero);
+		DEBUG_PRINT_STRUCT_MEMBER(VmcsSizeInBytes);
+		DEBUG_PRINT_STRUCT_MEMBER(Reserved1);
+		DEBUG_PRINT_STRUCT_MEMBER(VmcsPhysicalAddressWidth);
+		DEBUG_PRINT_STRUCT_MEMBER(DualMonitorSupport);
+		DEBUG_PRINT_STRUCT_MEMBER(MemoryType);
+		DEBUG_PRINT_STRUCT_MEMBER(InsOutsReporting);
+		DEBUG_PRINT_STRUCT_MEMBER(VmxControls);
+		DEBUG_PRINT_STRUCT_MEMBER(Reserved2);
 
 	return Register;
+}
+
+/*
+ * Enables "Virtual Machine Extensions Enable" bit in CR4 (bit 13)
+ */
+VOID ArchEnableVmxe()
+{
+	CR4 Register;
+
+	// Get CR4
+	Register.Flags = __readcr4();
+
+	// Enable the bit
+	Register.VmxEnable = 1;
+
+	// Write it back to cr4
+	__writecr4(Register.Flags);
+
+	// Read back to verify
+	Register.Flags = __readcr4();
+
+	DEBUG_PRINT_STRUCT_NAME(CR4);
+		DEBUG_PRINT_STRUCT_MEMBER(VirtualModeExtensions);
+		DEBUG_PRINT_STRUCT_MEMBER(ProtectedModeVirtualInterrupts);
+		DEBUG_PRINT_STRUCT_MEMBER(TimestampDisable);
+		DEBUG_PRINT_STRUCT_MEMBER(DebuggingExtensions);
+		DEBUG_PRINT_STRUCT_MEMBER(PageSizeExtensions);
+		DEBUG_PRINT_STRUCT_MEMBER(PhysicalAddressExtension);
+		DEBUG_PRINT_STRUCT_MEMBER(MachineCheckEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(PageGlobalEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(PerformanceMonitoringCounterEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(OsFxsaveFxrstorSupport);
+		DEBUG_PRINT_STRUCT_MEMBER(OsXmmExceptionSupport);
+		DEBUG_PRINT_STRUCT_MEMBER(UsermodeInstructionPrevention);
+		DEBUG_PRINT_STRUCT_MEMBER(VmxEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(SmxEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(PcidEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(OsXsave);
+		DEBUG_PRINT_STRUCT_MEMBER(SmepEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(SmapEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(ProtectionKeyEnable);
+		DEBUG_PRINT_STRUCT_MEMBER(Reserved4);
 }

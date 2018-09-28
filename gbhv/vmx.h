@@ -1,24 +1,6 @@
 #pragma once
 #include "extern.h"
-
-/*
- * Represents a VMXON region allocated for the processor to do internal state management.
- */
-typedef struct _VMXON_REGION
-{
-	/*
-	 * Initialize the version identifier in the VMXON region (the first 31 bits) with the VMCS revision identifier 
-	 * reported by capability MSRs. 
-	 * 
-	 * Clear bit 31 of the first 4 bytes of the VMXON region.
-	 */
-	UINT32 VmcsRevisionNumber;
-
-	/*
-	 * Unknown processor implemented data follows...
-	 */
-} VMXON_REGION, *PVMXON_REGION;
-
+#include "vmm.h"
 
 /*
  * CPUID Function identifier to check if VMX is enabled.
@@ -72,3 +54,5 @@ typedef struct _VMXON_REGION
 */
 #define VMX_VMXON_NUMBER_PAGES 2
 #define VMX_VMCS_NUMBER_PAGES 2
+
+BOOL VmxEnterRootMode(PVMX_PROCESSOR_CONTEXT Context);
