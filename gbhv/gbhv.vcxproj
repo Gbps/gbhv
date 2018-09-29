@@ -162,6 +162,7 @@
     <ClCompile Include="entry.c" />
     <ClCompile Include="os_nt.c" />
     <ClCompile Include="util.c" />
+    <ClCompile Include="vmcs.c" />
     <ClCompile Include="vmm.c" />
     <ClCompile Include="vmx.c" />
   </ItemGroup>
@@ -201,6 +202,7 @@
     <ClInclude Include="phnt\subprocesstag.h" />
     <ClInclude Include="phnt\winsta.h" />
     <ClInclude Include="util.h" />
+    <ClInclude Include="vmcs.h" />
     <ClInclude Include="vmm.h" />
     <ClInclude Include="vmx.h" />
     <ClInclude Include="arch.h" />

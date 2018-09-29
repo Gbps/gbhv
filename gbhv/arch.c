@@ -59,6 +59,7 @@ IA32_VMX_BASIC_REGISTER ArchGetBasicVmxCapabilities()
 
 	Register.Flags = ArchGetHostMSR(IA32_VMX_BASIC);
 
+	/*
 	DEBUG_PRINT_STRUCT_NAME(IA32_VMX_BASIC_REGISTER);
 		DEBUG_PRINT_STRUCT_MEMBER(VmcsRevisionId);
 		DEBUG_PRINT_STRUCT_MEMBER(MustBeZero);
@@ -70,7 +71,7 @@ IA32_VMX_BASIC_REGISTER ArchGetBasicVmxCapabilities()
 		DEBUG_PRINT_STRUCT_MEMBER(InsOutsReporting);
 		DEBUG_PRINT_STRUCT_MEMBER(VmxControls);
 		DEBUG_PRINT_STRUCT_MEMBER(Reserved2);
-
+	*/
 	return Register;
 }
 

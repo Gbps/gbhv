@@ -27,6 +27,29 @@ SIZE_T HvUtilBitClearBit(SIZE_T BitField, SIZE_T BitPosition)
 }
 
 /*
+ * Certain control MSRs in VMX will ask that certain bits always be 0, and some always be 1.
+ * 
+ * In these MSR formats, the lower 32-bits specify the "must be 1" bits.
+ * These bits are OR'd to ensure they are always 1, no matter what DesiredValue was set to.
+ * 
+ * The high 32-bits specify the "must be 0" bits.
+ * These bits are AND'd to ensure these bits are always 0, no matter what DesiredValue was set to.
+ */
+SIZE_T HvUtilEncodeMustBeBits(SIZE_T DesiredValue, SIZE_T ControlMSR)
+{
+	LARGE_INTEGER ControlMSRLargeInteger;
+	SIZE_T OutputBits;
+
+	// LARGE_INTEGER provides a nice interface to get the top 32 bits of a 64-bit integer
+	ControlMSRLargeInteger.QuadPart = ControlMSR;
+
+	DesiredValue &= ControlMSRLargeInteger.HighPart;
+	DesiredValue |= ControlMSRLargeInteger.LowPart;
+
+	return DesiredValue;
+}
+
+/*
  * Print a message to the kernel debugger.
  */
 VOID HvUtilLog(LPCSTR MessageFormat, ...)

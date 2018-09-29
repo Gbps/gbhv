@@ -35,3 +35,8 @@ typedef UINT32 BOOL;
  * A physical address pointer
  */
 typedef PVOID PPHYSVOID;
+
+/*
+ * Pointer values that don't follow NT code style.
+ */
+typedef VMCS* PVMCS;

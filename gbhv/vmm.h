@@ -37,8 +37,62 @@ typedef struct _VMX_PROCESSOR_CONTEXT
 	 */
 	PPHYSVOID VmxonRegionPhysical;
 
+	/*
+	 * Virtual pointer to memory allocated for the VMCS.
+	 * 
+	 * Carries all state information about the current VMX context.
+	 * 
+	 * The VMCS contains:
+	 *	* Guest-state area
+	 *	* Host-state area
+	 *	* VM-execution control fields
+	 *	* VM-exit control fields
+	 *	* VM-entry control fields
+	 *	* VM-exit information fields
+	 */
+	PVMCS VmcsRegion;
+
+	/*
+	 * Physical poiner to VmcsRegion.
+	 */
+	PPHYSVOID VmcsRegionPhysical;
+
+	/*
+	 * Contains a bitmap of MSR addresses that will cause exits.
+	 * If the bit is 1, that MSR address will cause an exit.
+	 */
+	VMX_MSR_BITMAP MsrBitmap;
+
+	/*
+	 * Physical address of the MsrBitmap.
+	 */
+	PPHYSVOID MsrBitmapPhysical;
+
 
 } VMX_PROCESSOR_CONTEXT, *PVMX_PROCESSOR_CONTEXT;
+
+typedef struct _VMX_VMM_CONTEXT
+{
+	/*
+	 * Number of processor contexts. Equal to the number of logical processors on the host.
+	 */
+	SIZE_T ProcessorCount;
+
+	/*
+	 * List of all processor contexts, indexed by the number processors.
+	 */
+	PVMX_PROCESSOR_CONTEXT* AllProcessorContexts;
+
+	/*
+	 * MSR reports various capabilities of the current running version of VMX.
+	 */
+	IA32_VMX_BASIC_REGISTER VmxCapabilities;
+
+} VMM_CONTEXT, *PVMM_CONTEXT;
+
+PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext);
+
+PVMM_CONTEXT HvAllocateVmmContext();
 
 BOOL HvInitializeAllProcessors();
 
@@ -46,6 +100,6 @@ ULONG_PTR HvpIPIBroadcastFunction(_In_ ULONG_PTR Argument);
 
 VOID HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context);
 
-PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext();
+PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext);
 
 VOID HvFreeLogicalProcessorContext(PVMX_PROCESSOR_CONTEXT Context);
