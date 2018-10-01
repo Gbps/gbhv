@@ -79,6 +79,11 @@ typedef struct _VMX_VMM_CONTEXT
 	SIZE_T ProcessorCount;
 
 	/*
+	 * Number of processors that have successfully entered VMX mode. If this is less than the number
+	 * of logical processors on the system, then there was a critical failure.
+	 */
+	SIZE_T SuccessfulInitializationsCount;
+	/*
 	 * List of all processor contexts, indexed by the number processors.
 	 */
 	PVMX_PROCESSOR_CONTEXT* AllProcessorContexts;
@@ -92,13 +97,18 @@ typedef struct _VMX_VMM_CONTEXT
 
 PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext);
 
+VOID HvFreeVmmContext(PVMM_CONTEXT Context);
+
 PVMM_CONTEXT HvAllocateVmmContext();
 
 BOOL HvInitializeAllProcessors();
 
-ULONG_PTR HvpIPIBroadcastFunction(_In_ ULONG_PTR Argument);
+VOID HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
+	_In_opt_ PVOID DeferredContext,
+	_In_opt_ PVOID SystemArgument1,
+	_In_opt_ PVOID SystemArgument2);
 
-VOID HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context);
+BOOL HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context);
 
 PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext);
 

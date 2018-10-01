@@ -38,7 +38,6 @@ SIZE_T HvUtilBitClearBit(SIZE_T BitField, SIZE_T BitPosition)
 SIZE_T HvUtilEncodeMustBeBits(SIZE_T DesiredValue, SIZE_T ControlMSR)
 {
 	LARGE_INTEGER ControlMSRLargeInteger;
-	SIZE_T OutputBits;
 
 	// LARGE_INTEGER provides a nice interface to get the top 32 bits of a 64-bit integer
 	ControlMSRLargeInteger.QuadPart = ControlMSR;

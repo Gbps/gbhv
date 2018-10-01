@@ -56,3 +56,16 @@
 #define VMX_VMCS_NUMBER_PAGES 2
 
 BOOL VmxEnterRootMode(PVMX_PROCESSOR_CONTEXT Context);
+BOOL VmxExitRootMode(PVMX_PROCESSOR_CONTEXT Context);
+
+/*
+ * Used to write a vmcs field using vmwrite and an ia32-doc register type.
+ */
+#define VmxVmwriteFieldFromRegister(_FIELD_DEFINE_, _REGISTER_VAR_) \
+	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _REGISTER_VAR_.Flags);
+
+/*
+ * Used to write a vmcs field using vmwrite and an immediate value.
+ */
+#define VmxVmwriteFieldFromImmediate(_FIELD_DEFINE_, _IMMEDIATE_) \
+	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _IMMEDIATE_);

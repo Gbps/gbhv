@@ -2,6 +2,93 @@
 #include "arch.h"
 #include "vmm.h"
 #include "util.h"
+#include "vmx.h"
+
+SIZE_T HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext)
+{
+	SIZE_T VmError;
+
+	/*
+	 * VMCS Link Pointer should always be 0xFFFFFFFFFFFFFFFF
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_VMCS_LINK_POINTER, ~0ULL);
+
+	/////////////////////////////// Pin-based Control ///////////////////////////////
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_PIN_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlPinBased(GlobalContext));
+
+	/////////////////////////////// Processor-Based VM-Execution Controls ///////////////////////////////
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlProcessor(GlobalContext));
+
+	/*
+	 * No vmexits on any exceptions.
+	 *
+	 * The exception bitmap is a 32-bit field that contains one bit for each exception. When an exception occurs, its
+	 * vector is used to select a bit in this field. If the bit is 1, the exception causes a VM exit. If the bit is 0, the exception
+	 * is delivered normally through the IDT, using the descriptor corresponding to the exception’s vector
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_EXCEPTION_BITMAP, 0);
+
+	/*
+	 * Whether a page fault (exception with vector 14) causes a VM exit is determined by bit 14 in the exception bitmap
+	 * as well as the error code produced by the page fault and two 32-bit fields in the VMCS (the page-fault error-code
+	 * mask and page-fault error-code match). See Section 25.2 for details.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_PAGEFAULT_ERROR_CODE_MASK, 0);
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_PAGEFAULT_ERROR_CODE_MATCH, 0);
+
+	/*
+	 * The VM-execution control fields include a set of 4 CR3-target values and a CR3-target count. The CR3-target
+	 * values each have 64 bits on processors that support Intel 64 architecture and 32 bits on processors that do not.
+	 * The CR3-target count has 32 bits on all processors.
+	 *
+	 * An execution of MOV to CR3 in VMX non-root operation does not cause a VM exit if its source operand matches one
+	 * of these values. If the CR3-target count is n, only the first n CR3-target values are considered; if the CR3-target
+	 * count is 0, MOV to CR3 always causes a VM exit
+	 * There are no limitations on the values that can be written for the CR3-target values. VM entry fails (see Section
+	 * 26.2) if the CR3-target count is greater than 4.
+	 * Future processors may support a different number of CR3-target values. Software should read the VMX capability
+	 * MSR IA32_VMX_MISC (see Appendix A.6) to determine the number of values supported.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR3_TARGET_COUNT, 0);
+
+	/////////////////////////////// VM-Exit Controls ///////////////////////////////
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMEXIT_CONTROLS, HvSetupVmcsControlVmExit(GlobalContext));
+
+	/*
+	 * Default the MSR store/load fields to 0, as we are not storing or loading any MSRs on exit.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMEXIT_MSR_STORE_COUNT, 0);
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMEXIT_MSR_LOAD_COUNT, 0);
+
+
+	/////////////////////////////// VM-Entry Controls ///////////////////////////////
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMENTRY_CONTROLS, HvSetupVmcsControlVmEntry(GlobalContext));
+
+	/*
+	 * Default the MSR load fields to 0, as we are not loading any MSRs on entry.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMENTRY_MSR_LOAD_COUNT, 0);
+
+	/*
+	 * This field receives basic information associated with the event causing the VM exit.
+	 * 
+	 * Default to 0 for safety.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMENTRY_INTERRUPTION_INFORMATION_FIELD, 0);
+
+	/*
+	 * For VM exits caused by hardware exceptions that would have
+	 * delivered an error code on the stack, this field receives that error code.
+	 * 
+	 * Default to 0 for safety.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMENTRY_EXCEPTION_ERROR_CODE, 0);
+
+	/////////////////////////////// Secondary Processor-Based VM-Execution Controls ///////////////////////////////
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_SECONDARY_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlSecondaryProcessor(GlobalContext));
+
+	return VmError;
+}
 
 /*
  * Configure the Pin-based Control settings of the VMCS.
@@ -177,3 +264,121 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_CONT
 
 	return Register;
 }
+
+
+/*
+ * Configure the VM-Entry Controls settings of the VMCS.
+ */
+IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_CONTEXT GlobalContext)
+{
+	IA32_VMX_ENTRY_CTLS_REGISTER Register;
+	SIZE_T ConfigMSR;
+
+	// Start with default 0 in all bits.
+	Register.Flags = 0;
+
+	/*
+	 *	Ensures the guest is always entering into 64-bit long mode.
+	 *	
+	 *  ------------------------------------------------------------------------------------------------------------
+	 * 
+	 *  On processors that support Intel 64 architecture, this control determines whether the logical
+	 *  processor is in IA-32e mode after VM entry. Its value is loaded into IA32_EFER.LMA as part of
+	 *  VM entry.1
+	 *  This control must be 0 on processors that do not support Intel 64 architecture.
+	 */
+	Register.Ia32EModeGuest = 1;
+
+	/*
+	 * Why open another detection vector?
+	 *
+	 * ------------------------------------------------------------------------------------------------------------
+	 *
+	 * If this control is 1, Intel Processor Trace suppresses data packets that indicate the use of
+	 * virtualization (see Chapter 36).
+	 */
+	Register.ConcealVmxFromPt = 1;
+
+	/*
+	 * There are two default states that the VMCS controls can use for setup.
+	 *
+	 * The old one has required bits that differ from the new one.
+	 *
+	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
+	 */
+	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	{
+		// We can use the true MSR to set the default/reserved values.
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_ENTRY_CTLS);
+	}
+	else
+	{
+		// Otherwise, use the defaults
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_ENTRY_CTLS);
+	}
+
+	// Encode "must be 1" and "must be 0" bits.
+	Register.Flags = HvUtilEncodeMustBeBits(Register.Flags, ConfigMSR);
+
+	return Register;
+}
+
+
+/*
+ * Configure the VM-Exit Controls settings of the VMCS.
+ */
+IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_CONTEXT GlobalContext)
+{
+	IA32_VMX_EXIT_CTLS_REGISTER Register;
+	SIZE_T ConfigMSR;
+
+	// Start with default 0 in all bits.
+	Register.Flags = 0;
+
+
+	/*
+	 *	Ensures the host is always entering into 64-bit long mode.
+	 *
+	 *  ------------------------------------------------------------------------------------------------------------
+	 *
+	 *  On processors that support Intel 64 architecture, this control determines whether a logical
+	 *  processor is in 64-bit mode after the next VM exit. Its value is loaded into CS.L,
+	 *  IA32_EFER.LME, and IA32_EFER.LMA on every VM exit.1
+	 *  This control must be 0 on processors that do not support Intel 64 architecture.
+	 */
+	Register.HostAddressSpaceSize = 1;
+
+	/*
+	 * Why open another detection vector?
+	 *
+	 * ------------------------------------------------------------------------------------------------------------
+	 *
+	 * If this control is 1, Intel Processor Trace suppresses data packets that indicate the use of
+	 * virtualization (see Chapter 36).
+	 */
+	Register.ConcealVmxFromPt = 1;
+
+	/*
+	 * There are two default states that the VMCS controls can use for setup.
+	 *
+	 * The old one has required bits that differ from the new one.
+	 *
+	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
+	 */
+	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	{
+		// We can use the true MSR to set the default/reserved values.
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_ENTRY_CTLS);
+	}
+	else
+	{
+		// Otherwise, use the defaults
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_ENTRY_CTLS);
+	}
+
+	// Encode "must be 1" and "must be 0" bits.
+	Register.Flags = HvUtilEncodeMustBeBits(Register.Flags, ConfigMSR);
+
+	return Register;
+}
+

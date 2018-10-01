@@ -1,6 +1,4 @@
 #include "vmm.h"
-
-#include <wdm.h>
 #include "vmx.h"
 
 /**
@@ -45,8 +43,17 @@ BOOL HvInitializeAllProcessors()
 	// Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
 	GlobalContext = HvAllocateVmmContext();
 
-	// Generates an IPI that signals all processors to execute the broadcast function.
-	KeIpiGenericCall(HvpIPIBroadcastFunction, (ULONG_PTR)GlobalContext);
+	// Generates a DPC that makes all processors execute the broadcast function.
+	KeGenericCallDpc(HvpDPCBroadcastFunction, (PVOID)GlobalContext);
+
+	if(GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
+	{
+		HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
+		return FALSE;
+	}
+
+	// TODO: Move to driver uninitalization
+	HvFreeVmmContext(GlobalContext);
 
 	HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
 	return TRUE;
@@ -73,6 +80,14 @@ PVMM_CONTEXT HvAllocateVmmContext()
 	// Get count of all logical processors on the system
 	Context->ProcessorCount = OsGetCPUCount();
 
+	// Number of successful processor initializations
+	Context->SuccessfulInitializationsCount = 0;
+
+	/*
+	 * Get capability MSRs and add them to the global context.
+	 */
+	Context->VmxCapabilities = ArchGetBasicVmxCapabilities();
+
 	PVMX_PROCESSOR_CONTEXT* ProcessorContexts = OsAllocateNonpagedMemory(Context->ProcessorCount * sizeof(PVMX_PROCESSOR_CONTEXT));
 	if(!ProcessorContexts)
 	{
@@ -95,12 +110,6 @@ PVMM_CONTEXT HvAllocateVmmContext()
 	}
 
 	Context->AllProcessorContexts = ProcessorContexts;
-
-	/*
-	 * Get capability MSRs and add them to the global context.
-	 */
-	Context->VmxCapabilities = ArchGetBasicVmxCapabilities();
-
 	HvUtilLog("VmcsRevisionNumber: %x", Context->VmxCapabilities.VmcsRevisionId);
 
 	return Context;
@@ -119,6 +128,9 @@ VOID HvFreeVmmContext(PVMM_CONTEXT Context)
 			HvFreeLogicalProcessorContext(Context->AllProcessorContexts[ProcessorNumber]);
 		}
 
+		// Free the collection of pointers to processor contexts
+		OsFreeNonpagedMemory(Context->AllProcessorContexts);
+
 		// Free the actual context struct
 		OsFreeNonpagedMemory(Context);
 	}
@@ -135,7 +147,7 @@ PVMXON_REGION HvAllocateVmxonRegion(PVMM_CONTEXT GlobalContext)
 	Region = (PVMXON_REGION)OsAllocateContiguousAlignedPages(VMX_VMXON_NUMBER_PAGES);
 
 	// Zero VMXON region just to be sure...
-	OsZeroMemory(Region, sizeof(VMX_PROCESSOR_CONTEXT));
+	OsZeroMemory(Region, VMX_VMXON_NUMBER_PAGES * PAGE_SIZE);
 
 	/*
 	 * Initialize the version identifier in the VMXON region (the first 31 bits) with the VMCS revision identifier
@@ -143,7 +155,8 @@ PVMXON_REGION HvAllocateVmxonRegion(PVMM_CONTEXT GlobalContext)
 	 *
 	 * Clear bit 31 of the first 4 bytes of the VMXON region. (Handled by OsZeroMemory above)
 	 */
-	Region->VmcsRevisionNumber = GlobalContext->VmxCapabilities.VmcsRevisionId;
+
+	Region->VmcsRevisionNumber = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
 
 	return Region;
 }
@@ -215,7 +228,7 @@ PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext)
 	/*
 	 * Software should write the VMCS revision identifier to the VMCS region before using that region for a VMCS.
 	 */
-	VmcsRegion->RevisionId = GlobalContext->VmxCapabilities.VmcsRevisionId;
+	VmcsRegion->RevisionId = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
 
 	return VmcsRegion;
 }
@@ -235,13 +248,18 @@ VOID HvFreeLogicalProcessorContext(PVMX_PROCESSOR_CONTEXT Context)
 /**
  * Called by HvInitializeAllProcessors to initialize VMX on all processors.
  */
-ULONG_PTR HvpIPIBroadcastFunction(_In_ ULONG_PTR Argument)
+VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
+	_In_opt_ PVOID DeferredContext,
+	_In_opt_ PVOID SystemArgument1,
+	_In_opt_ PVOID SystemArgument2)
 {
 	SIZE_T CurrentProcessorNumber;
 	PVMM_CONTEXT GlobalContext;
 	PVMX_PROCESSOR_CONTEXT CurrentContext;
 
-	GlobalContext = (PVMM_CONTEXT)Argument;
+	UNREFERENCED_PARAMETER(Dpc);
+
+	GlobalContext = (PVMM_CONTEXT)DeferredContext;
 
 	// Get the current processor number we're executing this function on right now
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
@@ -250,18 +268,26 @@ ULONG_PTR HvpIPIBroadcastFunction(_In_ ULONG_PTR Argument)
 	CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
 
 	// Initialize processor for VMX
-	HvInitializeLogicalProcessor(CurrentContext);
+	if(HvInitializeLogicalProcessor(CurrentContext))
+	{
+		// We were successful in initializing the processor
+		GlobalContext->SuccessfulInitializationsCount++;
+	}
 
-	// TODO: Free at APC level. 
-	// HvFreeLogicalProcessorContext(Context);
+	// These must be called for GenericDpcCall to signal other processors
+	// SimpleVisor code shows this
 
-	return 0;
+	// Wait for all DPCs to synchronize at this point
+	KeSignalCallDpcSynchronize(SystemArgument2);
+
+	// Mark the DPC as being complete
+	KeSignalCallDpcDone(SystemArgument1);
 }
 
 /**
  * Initialize VMCS and enter VMX root-mode.
  */
-VOID HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context)
+BOOL HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context)
 {
 	SIZE_T CurrentProcessorNumber;
 
@@ -271,11 +297,12 @@ VOID HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context)
 	// Enable VMXe, execute VMXON and enter VMX root mode
 	if (!VmxEnterRootMode(Context))
 	{
-		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to execute VMXON.", CurrentProcessorNumber);
-		return;
+		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+		return FALSE;
 	}
 	
 	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
-	
-	__vmx_off();
+
+	VmxExitRootMode(Context);
+	return TRUE;
 }

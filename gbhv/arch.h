@@ -13,6 +13,7 @@ BOOL ArchIsVMXAvailable();
 IA32_VMX_BASIC_REGISTER ArchGetBasicVmxCapabilities();
 
 VOID ArchEnableVmxe();
+VOID ArchDisableVmxe();
 
 #define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
 #define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)

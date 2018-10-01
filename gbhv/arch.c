@@ -118,3 +118,20 @@ VOID ArchEnableVmxe()
 		DEBUG_PRINT_STRUCT_MEMBER(Reserved4)
 	*/
 }
+
+/*
+ * Disable "Virtual Machine Extensions Enable" bit in CR4 (bit 13)
+ */
+VOID ArchDisableVmxe()
+{
+	CR4 Register;
+
+	// Get CR4
+	Register.Flags = __readcr4();
+
+	// Enable the bit
+	Register.VmxEnable = 0;
+
+	// Write it back to cr4
+	__writecr4(Register.Flags);
+}
