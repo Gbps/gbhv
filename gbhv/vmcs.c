@@ -147,9 +147,38 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SMBASE, SpecialRegisters->SmramBaseMsr);
 
 
+	/*
+	 * Setup default Guest Non-Register State
+	 */
 
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_INTERRUPTIBILITY_STATE, 0);
+	/*
+	 * Activity state (32 bits). This field identifies the logical processor’s activity state. When a logical processor is
+	 * executing instructions normally, it is in the active state. Execution of certain instructions and the occurrence
+	 * of certain events may cause a logical processor to transition to an inactive state in which it ceases to execute
+	 * instructions.
+	 */
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ACTIVITY_STATE, 0);
+
+	/*
+	 * Interruptibility state (32 bits). The IA-32 architecture includes features that permit certain events to be
+	 * blocked for a period of time. This field contains information about such blocking. Details and the format of this
+	 * field are given in Table 24-3.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_INTERRUPTIBILITY_STATE, 0);
+
+	/*
+	 * Pending debug exceptions (64 bits; 32 bits on processors that do not support Intel 64 architecture). IA-32
+	 * processors may recognize one or more debug exceptions without immediately delivering them.2 This field
+	 * contains information about such exceptions. This field is described in Table 24-4.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_PENDING_DEBUG_EXCEPTIONS, 0);
+
+	/*
+	 *  If the “VMCS shadowing” VM-execution control is 1, the VMREAD and VMWRITE
+	 *  instructions access the VMCS referenced by this pointer (see Section 24.10). Otherwise, software should set
+	 *  this field to FFFFFFFF_FFFFFFFFH to avoid VM-entry failures (see Section 26.3.1.5).
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_VMCS_LINK_POINTER, ~0ULL);
 
 	return VmError;
 }
@@ -158,10 +187,6 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 {
 	VMX_ERROR VmError;
 
-	/*
-	 * VMCS Link Pointer should always be 0xFFFFFFFFFFFFFFFF (=== ~0ULL)
-	 */
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_VMCS_LINK_POINTER, ~0ULL);
 
 	/////////////////////////////// Pin-based Control ///////////////////////////////
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_PIN_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlPinBased(GlobalContext));
