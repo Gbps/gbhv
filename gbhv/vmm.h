@@ -68,6 +68,16 @@ typedef struct _VMX_PROCESSOR_CONTEXT
 	 */
 	PPHYSVOID MsrBitmapPhysical;
 
+	/*
+	 * A structure of captured general purpose, floating point, and xmm registers at the time of VMX initialization.
+	 */
+	REGISTER_CONTEXT InitialRegisters;
+
+	/*
+	 * A structure of captured "special registers" at the time of VMX initialization used to setup the guest VMCS.
+	 */
+	IA32_SPECIAL_REGISTERS InitialSpecialRegisters;
+
 
 } VMX_PROCESSOR_CONTEXT, *PVMX_PROCESSOR_CONTEXT;
 

@@ -41,6 +41,10 @@ typedef PVOID PPHYSVOID;
  */
 typedef VMCS* PVMCS;
 
+/*
+ * GDT/IDT Segment Descriptors
+ */
+typedef SEGMENT_DESCRIPTOR_64* PSEGMENT_DESCRIPTOR_64;
 
 /*
  * NT APIs for DPCs Generic Calls (that for some reason aren't in the WDK)

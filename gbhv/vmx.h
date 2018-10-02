@@ -69,3 +69,45 @@ BOOL VmxExitRootMode(PVMX_PROCESSOR_CONTEXT Context);
  */
 #define VmxVmwriteFieldFromImmediate(_FIELD_DEFINE_, _IMMEDIATE_) \
 	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _IMMEDIATE_);
+
+/*
+ * Type of errors returned by vmx instructions (like vmwrite).
+ */
+typedef SIZE_T VMX_ERROR;
+
+typedef struct _VMX_SEGMENT_DESCRIPTOR
+{
+	/*
+	 * Selector (16 bits)
+	 */
+	SEGMENT_SELECTOR Selector;
+
+	/*
+	 * Base address (64 bits; 32 bits on processors that do not support Intel 64 architecture). The base-address
+	 * fields for CS, SS, DS, and ES have only 32 architecturally-defined bits; nevertheless, the corresponding
+	 * VMCS fields have 64 bits on processors that support Intel 64 architecture.
+	 */
+	SIZE_T BaseAddress;
+
+	/*
+	 * Segment limit (32 bits). The limit field is always a measure in bytes.
+	 */
+	UINT32 SegmentLimit;
+
+	/*
+	 * Access rights (32 bits). The format of this field is given in Table 24-2 and detailed as follows:
+	 * 
+	 * • The low 16 bits correspond to bits 23:8 of the upper 32 bits of a 64-bit segment descriptor. While bits
+	 *   19:16 of code-segment and data-segment descriptors correspond to the upper 4 bits of the segment
+	 *   limit, the corresponding bits (bits 11:8) are reserved in this VMCS field.
+	 * 
+	 * • Bit 16 indicates an unusable segment. Attempts to use such a segment fault except in 64-bit mode.
+	 *   In general, a segment register is unusable if it has been loaded with a null selector.
+	 * 
+	 * • Bits 31:17 are reserved.
+	 */
+	VMX_SEGMENT_ACCESS_RIGHTS AccessRights;
+} VMX_SEGMENT_DESCRIPTOR, *PVMX_SEGMENT_DESCRIPTOR;
+
+
+VMX_SEGMENT_DESCRIPTOR VmxGetSegmentDescriptorFromSelector(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector);

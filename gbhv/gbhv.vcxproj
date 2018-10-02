@@ -207,6 +207,9 @@
     <ClInclude Include="vmx.h" />
     <ClInclude Include="arch.h" />
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="arch.asm" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

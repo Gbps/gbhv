@@ -4,6 +4,7 @@
 #include "util.h"
 #include "vmx.h"
 #include "vmm.h"
+#include "intrin.h"
 
 /**
  * Get an MSR by its address and convert it to the specified type.
@@ -134,4 +135,20 @@ VOID ArchDisableVmxe()
 
 	// Write it back to cr4
 	__writecr4(Register.Flags);
+}
+
+VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers)
+{
+	/*
+	 * Control registers
+	 */
+	Registers->RegisterCr0.Flags = __readcr0();
+	Registers->RegisterCr3.Flags = __readcr3();
+	Registers->RegisterCr4.Flags = __readcr4();
+
+	/*
+	 * Global Descriptor Table and Interrupt Descriptor Table
+	 */
+	_sgdt(&Registers->RegisterGdt.Limit);
+	__sidt(&Registers->RegisterIdt.Limit);
 }

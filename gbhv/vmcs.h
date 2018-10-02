@@ -1,6 +1,9 @@
 #pragma once
 #include "extern.h"
 #include "vmm.h"
+#include "vmx.h"
+
+VMX_ERROR HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context);
 
 IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_CONTEXT GlobalContext);
 

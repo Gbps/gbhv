@@ -4,12 +4,49 @@
 #include "util.h"
 #include "vmx.h"
 
-SIZE_T HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext)
+VMX_ERROR HvSetupVmcsDefaults(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
 {
-	SIZE_T VmError;
+	//VMX_ERROR VmError;
+	UNREFERENCED_PARAMETER(GlobalContext);
 
 	/*
-	 * VMCS Link Pointer should always be 0xFFFFFFFFFFFFFFFF
+	 * Capture the current state of gp, float, and xmm registers of the processor.
+	 */
+	ArchCaptureContext(&Context->InitialRegisters);
+
+	/*
+	 * Capture the current state of special registers of the processor.
+	 * These values will be used to correctly setup initial values in the VMCS.
+	 */
+	ArchCaptureSpecialRegisters(&Context->InitialSpecialRegisters);
+	
+	return 0;
+}
+VMX_ERROR HvSetupVmcsGuestArea(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
+{
+	PREGISTER_CONTEXT Registers;
+	VMX_ERROR VmError;
+
+	Registers = &Context->InitialRegisters;
+
+	//VMX_ERROR VmError;
+	UNREFERENCED_PARAMETER(GlobalContext);
+	UNREFERENCED_PARAMETER(Context);
+
+	/* ES Segment */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_SELECTOR, Registers->SegEs.Flags);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_LIMIT, Registers->SegEs.);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_ACCESS_RIGHTS, __accessright(Registers->SegEs));
+
+	return VmError;
+}
+
+VMX_ERROR HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
+{
+	VMX_ERROR VmError;
+
+	/*
+	 * VMCS Link Pointer should always be 0xFFFFFFFFFFFFFFFF (=== ~0ULL)
 	 */
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_VMCS_LINK_POINTER, ~0ULL);
 
@@ -86,6 +123,20 @@ SIZE_T HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext)
 
 	/////////////////////////////// Secondary Processor-Based VM-Execution Controls ///////////////////////////////
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_SECONDARY_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlSecondaryProcessor(GlobalContext));
+
+	/*
+	 * MSR bitmap defines which MSRs in a certain usable range will cause exits.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_MSR_BITMAP_ADDRESS, (SIZE_T)Context->MsrBitmapPhysical);
+
+	/*
+	 * Setup Cr0/Cr4 shadowing so values of those registers as read by the guest will equate to the values of the system at setup time.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR0_GUEST_HOST_MASK, 0);
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR4_GUEST_HOST_MASK, 0);
+
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR0_READ_SHADOW, Context->InitialSpecialRegisters.RegisterCr0);
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR4_READ_SHADOW, Context->InitialSpecialRegisters.RegisterCr4);
 
 	return VmError;
 }
