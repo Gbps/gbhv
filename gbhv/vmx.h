@@ -80,7 +80,7 @@ typedef struct _VMX_SEGMENT_DESCRIPTOR
 	/*
 	 * Selector (16 bits)
 	 */
-	SEGMENT_SELECTOR Selector;
+	SIZE_T Selector;
 
 	/*
 	 * Base address (64 bits; 32 bits on processors that do not support Intel 64 architecture). The base-address
@@ -109,5 +109,4 @@ typedef struct _VMX_SEGMENT_DESCRIPTOR
 	VMX_SEGMENT_ACCESS_RIGHTS AccessRights;
 } VMX_SEGMENT_DESCRIPTOR, *PVMX_SEGMENT_DESCRIPTOR;
 
-
-VMX_SEGMENT_DESCRIPTOR VmxGetSegmentDescriptorFromSelector(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector);
+VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector);

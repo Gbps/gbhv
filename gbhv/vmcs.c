@@ -22,21 +22,79 @@ VMX_ERROR HvSetupVmcsDefaults(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT
 	
 	return 0;
 }
+
+/*
+ * Very carefully populates the segmentation parts of one of the guest segmentation VMCS fields according to the values of the currently running system.
+ */
+VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector, SIZE_T VmcsSelector, SIZE_T VmcsLimit, SIZE_T VmcsAccessRights, SIZE_T VmcsBase)
+{
+	VMX_SEGMENT_DESCRIPTOR SegmentDescriptor;
+	VMX_ERROR VmError;
+
+	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, SegmentSelector);
+
+	/*
+	 * The following fields for each of the registers CS, SS, DS, ES, FS, GS, LDTR, and TR:
+	 *  — Selector (16 bits).
+	 *  — Base address (64 bits; 32 bits on processors that do not support Intel 64 architecture). The base-address
+	 *    fields for CS, SS, DS, and ES have only 32 architecturally-defined bits; nevertheless, the corresponding
+	 *    VMCS fields have 64 bits on processors that support Intel 64 architecture.
+	 *  — Segment limit (32 bits). The limit field is always a measure in bytes.
+	 *  — Access rights (32 bits). The format of this field is given in Table 24-2 and detailed as follows
+	 */
+	VmxVmwriteFieldFromImmediate(VmcsSelector, SegmentDescriptor.Selector);
+	VmxVmwriteFieldFromImmediate(VmcsLimit, SegmentDescriptor.SegmentLimit);
+	VmxVmwriteFieldFromRegister(VmcsAccessRights, SegmentDescriptor.AccessRights);
+	VmxVmwriteFieldFromImmediate(VmcsBase, SegmentDescriptor.BaseAddress);
+
+	return VmError;
+}
+
+/*
+ * Calls HvSetupVmcsGuestSegment with encoded VMCS values corresponding to that segment.
+ */
+#define VMCS_SETUP_GUEST_SEGMENTATION(_SEGMENT_NAME_UPPER_) \
+	VmError |= HvSetupVmcsGuestSegment(GdtRegister, \
+	Registers->Seg##_SEGMENT_NAME_UPPER_, \
+	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_SELECTOR, \
+	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_LIMIT, \
+	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_ACCESS_RIGHTS, \
+	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_BASE \
+	);
+
+/*
+ * Sets up all fields of the guest area of the VMCS.
+ */
 VMX_ERROR HvSetupVmcsGuestArea(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
 {
 	PREGISTER_CONTEXT Registers;
 	VMX_ERROR VmError;
+	SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister;
 
+	UNREFERENCED_PARAMETER(GlobalContext);
+
+	/*
+	 * Registers as they were when we began setup. Used to get segment selector values.
+	 */
 	Registers = &Context->InitialRegisters;
 
-	//VMX_ERROR VmError;
-	UNREFERENCED_PARAMETER(GlobalContext);
-	UNREFERENCED_PARAMETER(Context);
+	/*
+	 * Grab the GDTR for the current running system.
+	 */
+	GdtRegister = Context->InitialSpecialRegisters.RegisterGdt;
 
-	/* ES Segment */
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_SELECTOR, Registers->SegEs.Flags);
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_LIMIT, Registers->SegEs.);
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ES_ACCESS_RIGHTS, __accessright(Registers->SegEs));
+	/*
+	 * Setup all VMCS fields for segmentation for the guest to match exactly with the current running OS.
+	 * 
+	 * Uses the segment selector from Registers and the GDT register from GdtRegister.
+	 */
+	VMCS_SETUP_GUEST_SEGMENTATION(ES);
+	VMCS_SETUP_GUEST_SEGMENTATION(CS);
+	VMCS_SETUP_GUEST_SEGMENTATION(SS);
+	VMCS_SETUP_GUEST_SEGMENTATION(DS);
+	VMCS_SETUP_GUEST_SEGMENTATION(FS);
+	VMCS_SETUP_GUEST_SEGMENTATION(GS);
+
 
 	return VmError;
 }
