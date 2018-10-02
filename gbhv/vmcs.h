@@ -3,7 +3,7 @@
 #include "vmm.h"
 #include "vmx.h"
 
-VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context);
+VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP);
 
 VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context);
 

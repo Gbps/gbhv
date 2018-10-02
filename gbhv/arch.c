@@ -142,33 +142,51 @@ VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers)
 	/*
 	 * Control registers
 	 */
-	Registers->RegisterCr0.Flags = __readcr0();
-	Registers->RegisterCr3.Flags = __readcr3();
-	Registers->RegisterCr4.Flags = __readcr4();
+	Registers->ControlRegister0.Flags = __readcr0();
+	Registers->ControlRegister3.Flags = __readcr3();
+	Registers->ControlRegister4.Flags = __readcr4();
 
 	/*
 	 * Global Descriptor Table and Interrupt Descriptor Table
 	 */
-	_sgdt(&Registers->RegisterGdt.Limit);
-	__sidt(&Registers->RegisterIdt.Limit);
+	_sgdt(&Registers->GlobalDescriptorTableRegister.Limit);
+	__sidt(&Registers->InterruptDescriptorTableRegister.Limit);
 
 	/*
 	 * Task register
 	 */
-	Registers->RegisterTr = ArchReadTaskRegister();
+	Registers->TaskRegister = ArchReadTaskRegister();
 
 	/*
 	 * LDT selector
 	 */
-	Registers->RegisterLdtr = ArchReadLocalDescriptorTableRegister();
+	Registers->LocalDescriptorTableRegister = ArchReadLocalDescriptorTableRegister();
 
 	/*
 	 * Debug register DR7
 	 */
-	Registers->RegisterDr7.Flags = __readdr(7);
+	Registers->DebugRegister7.Flags = __readdr(7);
 
 	/*
 	 * EFLAGS (RFLAGS) register
 	 */
-	Registers->RegisterRflags.Flags = (UINT32) __readeflags();
+	Registers->RflagsRegister.Flags = (UINT32) __readeflags();
+
+	/*
+	 * Required MSRs that will be loaded to the guest
+	 */
+	Registers->DebugControlMsr.Flags = __readmsr(IA32_DEBUGCTL);
+	Registers->SysenterCsMsr.Flags = __readmsr(IA32_SYSENTER_CS);
+	Registers->SysenterEspMsr = __readmsr(IA32_SYSENTER_ESP);
+	Registers->SysenterEipMsr = __readmsr(IA32_SYSENTER_EIP);
+	Registers->GlobalPerfControlMsr = __readmsr(IA32_PERF_GLOBAL_CTRL);
+	Registers->PatMsr.Flags = __readmsr(IA32_PAT);
+	Registers->EferMsr.Flags = __readmsr(IA32_EFER);
+	// Not including yet:
+	// Registers->BindConfigMsr.Flags = __readmsr(IA32_BNDCFGS);
+
+	/*
+	 * SMRAM base address
+	 */
+	Registers->SmramBaseMsr = __readmsr(IA32_SMBASE);
 }

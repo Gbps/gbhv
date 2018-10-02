@@ -65,7 +65,7 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 /*
  * Sets up all fields of the guest area of the VMCS.
  */
-VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
+VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP)
 {
 	PREGISTER_CONTEXT Registers;
 	VMX_ERROR VmError;
@@ -87,21 +87,29 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR
 	/*
 	 * Grab the GDTR for the current running system.
 	 */
-	GdtRegister = SpecialRegisters->RegisterGdt;
+	GdtRegister = SpecialRegisters->GlobalDescriptorTableRegister;
 
 	/*
 	 * Set guest cr0, cr3, cr4, dr7, rflags values to host values.
 	 */
-	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR0, SpecialRegisters->RegisterCr0);
-	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR3, SpecialRegisters->RegisterCr3);
-	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR4, SpecialRegisters->RegisterCr4);
-	VmxVmwriteFieldFromRegister(VMCS_GUEST_DR7, SpecialRegisters->RegisterDr7);
-	VmxVmwriteFieldFromRegister(VMCS_GUEST_RFLAGS, SpecialRegisters->RegisterRflags);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR0, SpecialRegisters->ControlRegister0);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR3, SpecialRegisters->ControlRegister3);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR4, SpecialRegisters->ControlRegister4);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_DR7, SpecialRegisters->DebugRegister7);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_RFLAGS, SpecialRegisters->RflagsRegister);
+
+	/*
+	 * These are given as argument for configuring how the guest initially enters.
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_RIP, GuestRIP);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_RSP, GuestRSP);
 
 	/*
 	 * Setup all VMCS fields for segmentation for the guest to match exactly with the current running OS.
 	 * 
 	 * Uses the segment selector from Registers and the GDT register from GdtRegister.
+	 * 
+	 * See #define directly above. Simply calls HvSetupVmcsGuestSegment.
 	 */
 	VMCS_SETUP_GUEST_SEGMENTATION(ES, Registers->SegES);
 	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);
@@ -109,9 +117,39 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR
 	VMCS_SETUP_GUEST_SEGMENTATION(DS, Registers->SegDS);
 	VMCS_SETUP_GUEST_SEGMENTATION(FS, Registers->SegFS);
 	VMCS_SETUP_GUEST_SEGMENTATION(GS, Registers->SegGS);
-	VMCS_SETUP_GUEST_SEGMENTATION(LDTR, SpecialRegisters->RegisterLdtr);
-	VMCS_SETUP_GUEST_SEGMENTATION(TR, SpecialRegisters->RegisterTr);
+	VMCS_SETUP_GUEST_SEGMENTATION(LDTR, SpecialRegisters->LocalDescriptorTableRegister);
+	VMCS_SETUP_GUEST_SEGMENTATION(TR, SpecialRegisters->TaskRegister);
 
+	/*
+	 * Copy GDT descriptor register
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_GDTR_BASE, SpecialRegisters->GlobalDescriptorTableRegister.BaseAddress);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_GDTR_LIMIT, SpecialRegisters->GlobalDescriptorTableRegister.Limit);
+
+	/*
+	 * Copy IDT descriptor register
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_IDTR_BASE, SpecialRegisters->InterruptDescriptorTableRegister.BaseAddress);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_IDTR_LIMIT, SpecialRegisters->InterruptDescriptorTableRegister.Limit);
+
+	/*
+	 * Copy required architecture MSRs to the guest.
+	 */
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_DEBUGCTL, SpecialRegisters->DebugControlMsr);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_SYSENTER_CS, SpecialRegisters->SysenterCsMsr);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SYSENTER_EIP, SpecialRegisters->SysenterEipMsr);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SYSENTER_ESP, SpecialRegisters->SysenterEspMsr);
+
+	/* Not required, can use regular MSR load/store vmexits: */
+	//VmxVmwriteFieldFromImmediate(VMCS_GUEST_PERF_GLOBAL_CTRL, SpecialRegisters->GlobalPerfControlMsr);
+	//VmxVmwriteFieldFromRegister(VMCS_GUEST_PAT, SpecialRegisters->PatMsr);
+	//VmxVmwriteFieldFromRegister(VMCS_GUEST_EFER, SpecialRegisters->EferMsr);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SMBASE, SpecialRegisters->SmramBaseMsr);
+
+
+
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_INTERRUPTIBILITY_STATE, 0);
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_ACTIVITY_STATE, 0);
 
 	return VmError;
 }
@@ -210,8 +248,8 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR0_GUEST_HOST_MASK, 0);
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR4_GUEST_HOST_MASK, 0);
 
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR0_READ_SHADOW, Context->InitialSpecialRegisters.RegisterCr0);
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR4_READ_SHADOW, Context->InitialSpecialRegisters.RegisterCr4);
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR0_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister0);
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR4_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister4);
 
 	return VmError;
 }

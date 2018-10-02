@@ -11,46 +11,86 @@ typedef struct _IA32_SPECIAL_REGISTERS
 	/*
 	 * Control register CR0
 	 */
-	CR0 RegisterCr0;
+	CR0 ControlRegister0;
 	/*
 	 * Control register CR3
 	 */
-	CR3 RegisterCr3;
+	CR3 ControlRegister3;
 
 	/*
 	 * Control register CR4
 	 */
-	CR4 RegisterCr4;
+	CR4 ControlRegister4;
 
 	/*
 	 * Register containing the pointer to the Global Descriptor Table
 	 */
-	SEGMENT_DESCRIPTOR_REGISTER_64 RegisterGdt;
+	SEGMENT_DESCRIPTOR_REGISTER_64 GlobalDescriptorTableRegister;
 
 	/*
 	 * Register containing the pointer to the Interrupt Descriptor Table
 	 */
-	SEGMENT_DESCRIPTOR_REGISTER_64 RegisterIdt;
+	SEGMENT_DESCRIPTOR_REGISTER_64 InterruptDescriptorTableRegister;
 
 	/*
 	 * Debug register DR7
 	 */
-	DR7 RegisterDr7;
+	DR7 DebugRegister7;
 
 	/* 
 	 * RFLAGS register 
 	 */
-	EFLAGS RegisterRflags;
+	EFLAGS RflagsRegister;
 
 	/* 
 	 * Task register holding the task segment selector
 	 */
-	SEGMENT_SELECTOR RegisterTr;
+	SEGMENT_SELECTOR TaskRegister;
 
 	/*
 	 * LDT register holding the local descriptor table segment selector
 	 */
-	SEGMENT_SELECTOR RegisterLdtr;
+	SEGMENT_SELECTOR LocalDescriptorTableRegister;
+
+	/*
+	 * Required Architecture MSR for loading on VMCS guest
+	 */
+	IA32_DEBUGCTL_REGISTER DebugControlMsr;
+
+	/*
+	 * Required Architecture MSR  for loading on VMCS guest
+	 */
+	IA32_SYSENTER_CS_REGISTER SysenterCsMsr;
+
+	/*
+	 * Required Architecture MSR for loading on VMCS guest
+	 */
+	SIZE_T SysenterEspMsr;
+
+	/*
+	 * Required Architecture MSR for loading on VMCS guest
+	 */
+	SIZE_T SysenterEipMsr;
+
+	/*
+	 * Optional Architecture MSR for loading on VMCS guest
+	 */
+	SIZE_T GlobalPerfControlMsr;
+
+	/*
+	 * Optional Architecture MSR for loading on VMCS guest
+	 */
+	IA32_PAT_REGISTER PatMsr;
+
+	/*
+	 * Optional Architecture MSR for loading on VMCS guest
+	 */
+	IA32_EFER_REGISTER EferMsr;
+
+	/*
+	 * Required Architecture MSR for loading on VMCS guest
+	 */
+	SIZE_T SmramBaseMsr;
 
 } IA32_SPECIAL_REGISTERS, *PIA32_SPECIAL_REGISTERS;
 
