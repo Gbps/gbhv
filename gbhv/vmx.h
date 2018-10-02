@@ -55,8 +55,8 @@
 #define VMX_VMXON_NUMBER_PAGES 2
 #define VMX_VMCS_NUMBER_PAGES 2
 
-BOOL VmxEnterRootMode(PVMX_PROCESSOR_CONTEXT Context);
-BOOL VmxExitRootMode(PVMX_PROCESSOR_CONTEXT Context);
+BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context);
+BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context);
 
 /*
  * Used to write a vmcs field using vmwrite and an ia32-doc register type.

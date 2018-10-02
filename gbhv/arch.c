@@ -151,4 +151,24 @@ VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers)
 	 */
 	_sgdt(&Registers->RegisterGdt.Limit);
 	__sidt(&Registers->RegisterIdt.Limit);
+
+	/*
+	 * Task register
+	 */
+	Registers->RegisterTr = ArchReadTaskRegister();
+
+	/*
+	 * LDT selector
+	 */
+	Registers->RegisterLdtr = ArchReadLocalDescriptorTableRegister();
+
+	/*
+	 * Debug register DR7
+	 */
+	Registers->RegisterDr7.Flags = __readdr(7);
+
+	/*
+	 * EFLAGS (RFLAGS) register
+	 */
+	Registers->RegisterRflags.Flags = (UINT32) __readeflags();
 }

@@ -1,7 +1,7 @@
 #include "vmx.h"
 #include "vmm.h"
 
-BOOL VmxEnterRootMode(PVMX_PROCESSOR_CONTEXT Context)
+BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
 	// Enable VMXe in CR4 of the processor
 	ArchEnableVmxe();
@@ -33,7 +33,7 @@ BOOL VmxEnterRootMode(PVMX_PROCESSOR_CONTEXT Context)
 	return TRUE;
 }
 
-BOOL VmxExitRootMode(PVMX_PROCESSOR_CONTEXT Context)
+BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
 	// And clear the VMCS before writing the configuration entries to it
 	if (__vmx_vmclear((ULONGLONG*)&Context->VmcsRegionPhysical) != 0)
@@ -79,7 +79,10 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	/*
 	 * Index into the GDT to get a pointer to the segment descriptor for this segment.
 	 */
-	OsSegmentDescriptor = (PSEGMENT_DESCRIPTOR_64)((PSEGMENT_DESCRIPTOR_64*)GdtRegister.BaseAddress + SegmentSelector.Index);
+	OsSegmentDescriptor = (PSEGMENT_DESCRIPTOR_64)(
+								(PSEGMENT_DESCRIPTOR_64*) GdtRegister.BaseAddress 
+														+ SegmentSelector.Index
+						  );
 
 	/*
 	 * Populate the base address from the OS-defined base address.
@@ -87,8 +90,8 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	 * Populated from three address values stored in the GDT entry.
 	 */
 	VmxSegmentDescriptor->BaseAddress = (OsSegmentDescriptor->BaseAddressUpper << 24) |
-		(OsSegmentDescriptor->BaseAddressMiddle << 16) |
-		(OsSegmentDescriptor->BaseAddressLow);
+											(OsSegmentDescriptor->BaseAddressMiddle << 16) |
+											(OsSegmentDescriptor->BaseAddressLow);
 
 	/*
 	 * Ensure that the BaseAddress is a 32-bit value, even though it's defined as a 64-bit integer in the VMCS.
@@ -110,14 +113,14 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	/*
 	 * Copy over all of the access right values from the OS segment descriptor to the VMX descriptor.
 	 */
-	VmxSegmentDescriptor->AccessRights.Type = OsSegmentDescriptor->Type;
-	VmxSegmentDescriptor->AccessRights.DescriptorType = OsSegmentDescriptor->DescriptorType;
+	VmxSegmentDescriptor->AccessRights.Type                     = OsSegmentDescriptor->Type;
+	VmxSegmentDescriptor->AccessRights.DescriptorType           = OsSegmentDescriptor->DescriptorType;
 	VmxSegmentDescriptor->AccessRights.DescriptorPrivilegeLevel = OsSegmentDescriptor->DescriptorPrivilegeLevel;
-	VmxSegmentDescriptor->AccessRights.Present = OsSegmentDescriptor->Present;
-	VmxSegmentDescriptor->AccessRights.AvailableBit = OsSegmentDescriptor->System;
-	VmxSegmentDescriptor->AccessRights.LongMode = OsSegmentDescriptor->LongMode;
-	VmxSegmentDescriptor->AccessRights.DefaultBig = OsSegmentDescriptor->DefaultBig;
-	VmxSegmentDescriptor->AccessRights.Granularity = OsSegmentDescriptor->Granularity;
+	VmxSegmentDescriptor->AccessRights.Present                  = OsSegmentDescriptor->Present;
+	VmxSegmentDescriptor->AccessRights.AvailableBit             = OsSegmentDescriptor->System;
+	VmxSegmentDescriptor->AccessRights.LongMode                 = OsSegmentDescriptor->LongMode;
+	VmxSegmentDescriptor->AccessRights.DefaultBig               = OsSegmentDescriptor->DefaultBig;
+	VmxSegmentDescriptor->AccessRights.Granularity              = OsSegmentDescriptor->Granularity;
 
 	/*
 	 * Mark the segment usable for VMX.

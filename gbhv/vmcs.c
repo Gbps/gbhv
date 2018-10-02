@@ -4,7 +4,7 @@
 #include "util.h"
 #include "vmx.h"
 
-VMX_ERROR HvSetupVmcsDefaults(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
+VMX_ERROR HvSetupVmcsDefaults(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
 {
 	//VMX_ERROR VmError;
 	UNREFERENCED_PARAMETER(GlobalContext);
@@ -53,9 +53,9 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 /*
  * Calls HvSetupVmcsGuestSegment with encoded VMCS values corresponding to that segment.
  */
-#define VMCS_SETUP_GUEST_SEGMENTATION(_SEGMENT_NAME_UPPER_) \
+#define VMCS_SETUP_GUEST_SEGMENTATION(_SEGMENT_NAME_UPPER_, _REGISTER_VALUE_) \
 	VmError |= HvSetupVmcsGuestSegment(GdtRegister, \
-	Registers->Seg##_SEGMENT_NAME_UPPER_, \
+	_REGISTER_VALUE_, \
 	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_SELECTOR, \
 	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_LIMIT, \
 	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_ACCESS_RIGHTS, \
@@ -65,11 +65,12 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 /*
  * Sets up all fields of the guest area of the VMCS.
  */
-VMX_ERROR HvSetupVmcsGuestArea(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
+VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
 {
 	PREGISTER_CONTEXT Registers;
 	VMX_ERROR VmError;
 	SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister;
+	PIA32_SPECIAL_REGISTERS SpecialRegisters;
 
 	UNREFERENCED_PARAMETER(GlobalContext);
 
@@ -79,27 +80,43 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEX
 	Registers = &Context->InitialRegisters;
 
 	/*
+	 * Special registers of the host, such as control registers (CR0, CR4)
+	 */
+	SpecialRegisters = &Context->InitialSpecialRegisters;
+
+	/*
 	 * Grab the GDTR for the current running system.
 	 */
-	GdtRegister = Context->InitialSpecialRegisters.RegisterGdt;
+	GdtRegister = SpecialRegisters->RegisterGdt;
+
+	/*
+	 * Set guest cr0, cr3, cr4, dr7, rflags values to host values.
+	 */
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR0, SpecialRegisters->RegisterCr0);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR3, SpecialRegisters->RegisterCr3);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_CR4, SpecialRegisters->RegisterCr4);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_DR7, SpecialRegisters->RegisterDr7);
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_RFLAGS, SpecialRegisters->RegisterRflags);
 
 	/*
 	 * Setup all VMCS fields for segmentation for the guest to match exactly with the current running OS.
 	 * 
 	 * Uses the segment selector from Registers and the GDT register from GdtRegister.
 	 */
-	VMCS_SETUP_GUEST_SEGMENTATION(ES);
-	VMCS_SETUP_GUEST_SEGMENTATION(CS);
-	VMCS_SETUP_GUEST_SEGMENTATION(SS);
-	VMCS_SETUP_GUEST_SEGMENTATION(DS);
-	VMCS_SETUP_GUEST_SEGMENTATION(FS);
-	VMCS_SETUP_GUEST_SEGMENTATION(GS);
+	VMCS_SETUP_GUEST_SEGMENTATION(ES, Registers->SegES);
+	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);
+	VMCS_SETUP_GUEST_SEGMENTATION(SS, Registers->SegSS);
+	VMCS_SETUP_GUEST_SEGMENTATION(DS, Registers->SegDS);
+	VMCS_SETUP_GUEST_SEGMENTATION(FS, Registers->SegFS);
+	VMCS_SETUP_GUEST_SEGMENTATION(GS, Registers->SegGS);
+	VMCS_SETUP_GUEST_SEGMENTATION(LDTR, SpecialRegisters->RegisterLdtr);
+	VMCS_SETUP_GUEST_SEGMENTATION(TR, SpecialRegisters->RegisterTr);
 
 
 	return VmError;
 }
 
-VMX_ERROR HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CONTEXT Context)
+VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
 {
 	VMX_ERROR VmError;
 
@@ -202,7 +219,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_CONTEXT GlobalContext, PVMX_PROCESSOR_CO
 /*
  * Configure the Pin-based Control settings of the VMCS.
  */
-IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_CONTEXT GlobalContext)
+IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	IA32_VMX_PINBASED_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -237,7 +254,7 @@ IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_CONTEXT GlobalCo
 /*
  * Configure the Processor-Based VM-Execution Controls of the VMCS.
  */
-IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_CONTEXT GlobalContext)
+IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	IA32_VMX_PROCBASED_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -303,7 +320,7 @@ IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_CONTEXT Global
 /*
  * Configure the Secondary Processor-Based VM-Execution Controls settings of the VMCS.
  */
-IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_CONTEXT GlobalContext)
+IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	IA32_VMX_PROCBASED_CTLS2_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -378,7 +395,7 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_CONT
 /*
  * Configure the VM-Entry Controls settings of the VMCS.
  */
-IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_CONTEXT GlobalContext)
+IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	IA32_VMX_ENTRY_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -436,7 +453,7 @@ IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_CONTEXT GlobalContex
 /*
  * Configure the VM-Exit Controls settings of the VMCS.
  */
-IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_CONTEXT GlobalContext)
+IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	IA32_VMX_EXIT_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;

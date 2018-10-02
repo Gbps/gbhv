@@ -76,4 +76,16 @@ ArchCaptureContext PROC
 	ret
 ArchCaptureContext ENDP
 
+; Reads the task register segment selector and returns it
+ArchReadTaskRegister PROC
+	str ax
+	ret
+ArchReadTaskRegister ENDP
+
+; Reads the LDT segment selector and returns it
+ArchReadLocalDescriptorTableRegister PROC
+	sldt ax
+	ret
+ArchReadLocalDescriptorTableRegister ENDP
+
 END

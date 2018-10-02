@@ -9,7 +9,7 @@
 BOOL HvInitializeAllProcessors()
 {
 	SIZE_T FeatureMSR;
-	PVMM_CONTEXT GlobalContext;
+	PVMM_GLOBAL_CONTEXT GlobalContext;
 
 	HvUtilLog("HvInitializeAllProcessors: Starting.");
 
@@ -66,12 +66,12 @@ BOOL HvInitializeAllProcessors()
  * 
  * Accesses capability MSRs to get information about the VMX execution environment.
  */
-PVMM_CONTEXT HvAllocateVmmContext()
+PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
 {
-	PVMM_CONTEXT Context;
+	PVMM_GLOBAL_CONTEXT Context;
 
 	// Allocate the global context structure
-	Context = (PVMM_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
+	Context = (PVMM_GLOBAL_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
 	if(!Context)
 	{
 		return NULL;
@@ -88,7 +88,7 @@ PVMM_CONTEXT HvAllocateVmmContext()
 	 */
 	Context->VmxCapabilities = ArchGetBasicVmxCapabilities();
 
-	PVMX_PROCESSOR_CONTEXT* ProcessorContexts = OsAllocateNonpagedMemory(Context->ProcessorCount * sizeof(PVMX_PROCESSOR_CONTEXT));
+	PVMM_PROCESSOR_CONTEXT* ProcessorContexts = OsAllocateNonpagedMemory(Context->ProcessorCount * sizeof(PVMM_PROCESSOR_CONTEXT));
 	if(!ProcessorContexts)
 	{
 		return NULL;
@@ -118,7 +118,7 @@ PVMM_CONTEXT HvAllocateVmmContext()
 /*
  * Free global VMM context and all logical processor contexts.
  */
-VOID HvFreeVmmContext(PVMM_CONTEXT Context)
+VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context)
 {
 	if(Context)
 	{
@@ -139,7 +139,7 @@ VOID HvFreeVmmContext(PVMM_CONTEXT Context)
 /*
  * Allocate and setup the VMXON region for the logical processor context.
  */
-PVMXON_REGION HvAllocateVmxonRegion(PVMM_CONTEXT GlobalContext)
+PVMXON_REGION HvAllocateVmxonRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	PVMXON_REGION Region;
 
@@ -166,12 +166,12 @@ PVMXON_REGION HvAllocateVmxonRegion(PVMM_CONTEXT GlobalContext)
  * 
  * Returns NULL on error.
  */
-PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext)
+PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
-	PVMX_PROCESSOR_CONTEXT Context;
+	PVMM_PROCESSOR_CONTEXT Context;
 
 	// Allocate some generic memory for our context
-	Context = (PVMX_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMX_PROCESSOR_CONTEXT));
+	Context = (PVMM_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMX_PROCESSOR_CONTEXT));
 	if(!Context)
 	{
 		return NULL;
@@ -215,7 +215,7 @@ PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalCont
 /*
  * Allocate a VMCS memory region and write the revision identifier.
  */
-PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext)
+PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
 	PVMCS VmcsRegion;
 
@@ -236,7 +236,7 @@ PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext)
 /*
  * Free a logical processor context allocated by HvAllocateLogicalProcessorContext
  */
-VOID HvFreeLogicalProcessorContext(PVMX_PROCESSOR_CONTEXT Context)
+VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
 {
 	if(Context)
 	{
@@ -254,12 +254,12 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	_In_opt_ PVOID SystemArgument2)
 {
 	SIZE_T CurrentProcessorNumber;
-	PVMM_CONTEXT GlobalContext;
-	PVMX_PROCESSOR_CONTEXT CurrentContext;
+	PVMM_GLOBAL_CONTEXT GlobalContext;
+	PVMM_PROCESSOR_CONTEXT CurrentContext;
 
 	UNREFERENCED_PARAMETER(Dpc);
 
-	GlobalContext = (PVMM_CONTEXT)DeferredContext;
+	GlobalContext = (PVMM_GLOBAL_CONTEXT)DeferredContext;
 
 	// Get the current processor number we're executing this function on right now
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
@@ -287,7 +287,7 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 /**
  * Initialize VMCS and enter VMX root-mode.
  */
-BOOL HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context)
+BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context)
 {
 	SIZE_T CurrentProcessorNumber;
 

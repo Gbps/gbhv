@@ -79,7 +79,7 @@ typedef struct _VMX_PROCESSOR_CONTEXT
 	IA32_SPECIAL_REGISTERS InitialSpecialRegisters;
 
 
-} VMX_PROCESSOR_CONTEXT, *PVMX_PROCESSOR_CONTEXT;
+} VMX_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
 
 typedef struct _VMX_VMM_CONTEXT
 {
@@ -96,20 +96,20 @@ typedef struct _VMX_VMM_CONTEXT
 	/*
 	 * List of all processor contexts, indexed by the number processors.
 	 */
-	PVMX_PROCESSOR_CONTEXT* AllProcessorContexts;
+	PVMM_PROCESSOR_CONTEXT* AllProcessorContexts;
 
 	/*
 	 * MSR reports various capabilities of the current running version of VMX.
 	 */
 	IA32_VMX_BASIC_REGISTER VmxCapabilities;
 
-} VMM_CONTEXT, *PVMM_CONTEXT;
+} VMM_CONTEXT, *PVMM_GLOBAL_CONTEXT;
 
-PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext);
+PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext);
 
-VOID HvFreeVmmContext(PVMM_CONTEXT Context);
+VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context);
 
-PVMM_CONTEXT HvAllocateVmmContext();
+PVMM_GLOBAL_CONTEXT HvAllocateVmmContext();
 
 BOOL HvInitializeAllProcessors();
 
@@ -118,8 +118,8 @@ VOID HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	_In_opt_ PVOID SystemArgument1,
 	_In_opt_ PVOID SystemArgument2);
 
-BOOL HvInitializeLogicalProcessor(PVMX_PROCESSOR_CONTEXT Context);
+BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context);
 
-PVMX_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext);
+PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext);
 
-VOID HvFreeLogicalProcessorContext(PVMX_PROCESSOR_CONTEXT Context);
+VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context);

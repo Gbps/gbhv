@@ -31,12 +31,35 @@ typedef struct _IA32_SPECIAL_REGISTERS
 	 * Register containing the pointer to the Interrupt Descriptor Table
 	 */
 	SEGMENT_DESCRIPTOR_REGISTER_64 RegisterIdt;
+
+	/*
+	 * Debug register DR7
+	 */
+	DR7 RegisterDr7;
+
+	/* 
+	 * RFLAGS register 
+	 */
+	EFLAGS RegisterRflags;
+
+	/* 
+	 * Task register holding the task segment selector
+	 */
+	SEGMENT_SELECTOR RegisterTr;
+
+	/*
+	 * LDT register holding the local descriptor table segment selector
+	 */
+	SEGMENT_SELECTOR RegisterLdtr;
+
 } IA32_SPECIAL_REGISTERS, *PIA32_SPECIAL_REGISTERS;
 
 
 /*
  * Win32 Modified CONTEXT Structure with IA32-Doc Register Fields
  */
+
+#pragma warning(push, 0)
 
  //
  // Context Frame
@@ -189,6 +212,11 @@ typedef struct DECLSPEC_ALIGN(16) _REGISTER_CONTEXT {
 	ULONG64 LastExceptionFromRip;
 } REGISTER_CONTEXT, *PREGISTER_CONTEXT;
 
+#pragma warning(pop)
+
+#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
+#define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)
+
 
 SIZE_T ArchGetHostMSR(ULONG MsrAddress);
 
@@ -206,9 +234,22 @@ VOID ArchDisableVmxe();
 VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers);
 
 /*
+ * =======================================================================
+ * ============ Below are definitions implemented in arch.asm ============
+ * =======================================================================
+ */
+
+/*
  * Literally the contents of ntoskrnl's RtlCaptureContext to capture CPU register state.
  */
 VOID ArchCaptureContext(PREGISTER_CONTEXT RegisterContext);
 
-#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
-#define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)
+/*
+ * Get the segment selector for the task selector segment (TSS)
+ */
+SEGMENT_SELECTOR ArchReadTaskRegister();
+
+/*
+ * Get the segment selector for the Local Descriptor Table (LDT)
+ */
+SEGMENT_SELECTOR ArchReadLocalDescriptorTableRegister();

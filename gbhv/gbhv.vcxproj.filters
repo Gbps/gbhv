@@ -169,7 +169,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <MASM Include="arch.asm">
+    <MASM Include="archdefs.asm">
       <Filter>Source Files</Filter>
     </MASM>
   </ItemGroup>
