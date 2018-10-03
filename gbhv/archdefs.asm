@@ -1,5 +1,5 @@
 
-.CONST
+.CODE
 
 ; Literally the contents of RtlCaptureContext from ntoskrnl
 ArchCaptureContext PROC

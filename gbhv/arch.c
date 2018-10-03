@@ -184,9 +184,4 @@ VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers)
 	Registers->EferMsr.Flags = __readmsr(IA32_EFER);
 	// Not including yet:
 	// Registers->BindConfigMsr.Flags = __readmsr(IA32_BNDCFGS);
-
-	/*
-	 * SMRAM base address
-	 */
-	Registers->SmramBaseMsr = __readmsr(IA32_SMBASE);
 }

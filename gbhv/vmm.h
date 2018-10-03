@@ -23,8 +23,15 @@ typedef struct _VMXON_REGION
 	 */
 } VMXON_REGION, *PVMXON_REGION;
 
-typedef struct _VMX_PROCESSOR_CONTEXT
+typedef struct _VMX_VMM_CONTEXT VMX_VMM_CONTEXT, *PVMM_GLOBAL_CONTEXT;
+
+typedef struct _VMM_PROCESSOR_CONTEXT
 {
+	/*
+	 * Pointer back to the global context structure.
+	 */
+	PVMM_GLOBAL_CONTEXT GlobalContext;
+
 	/*
 	 * Virtual pointer to memory allocated for VMXON.
 	 *

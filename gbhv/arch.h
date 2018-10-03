@@ -87,11 +87,6 @@ typedef struct _IA32_SPECIAL_REGISTERS
 	 */
 	IA32_EFER_REGISTER EferMsr;
 
-	/*
-	 * Required Architecture MSR for loading on VMCS guest
-	 */
-	SIZE_T SmramBaseMsr;
-
 } IA32_SPECIAL_REGISTERS, *PIA32_SPECIAL_REGISTERS;
 
 

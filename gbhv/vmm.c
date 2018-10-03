@@ -1,5 +1,6 @@
 #include "vmm.h"
 #include "vmx.h"
+#include "vmcs.h"
 
 /**
  * Call HvInitializeLogicalProcessor on all processors using an Inter-Process Interrupt (IPI).
@@ -180,6 +181,9 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT Glo
 	// Inititalize all fields to 0
 	OsZeroMemory(Context, sizeof(VMX_PROCESSOR_CONTEXT));
 
+	// Entry to refer back to the global context for simplicity
+	Context->GlobalContext = GlobalContext;
+
 	// Allocate and setup the VMXON region for this processor
 	Context->VmxonRegion = HvAllocateVmxonRegion(GlobalContext);
 	if(!Context->VmxonRegion)
@@ -300,7 +304,13 @@ BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context)
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
 		return FALSE;
 	}
-	
+
+	if (!HvSetupVmcsDefaults(Context))
+	{
+		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+		return FALSE;
+	}
+
 	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
 
 	VmxExitRootMode(Context);

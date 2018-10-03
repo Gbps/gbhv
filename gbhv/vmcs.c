@@ -4,10 +4,11 @@
 #include "util.h"
 #include "vmx.h"
 
-VMX_ERROR HvSetupVmcsDefaults(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
+BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context)
 {
-	//VMX_ERROR VmError;
-	UNREFERENCED_PARAMETER(GlobalContext);
+	VMX_ERROR VmError;
+
+	VmError = 0;
 
 	/*
 	 * Capture the current state of gp, float, and xmm registers of the processor.
@@ -16,11 +17,30 @@ VMX_ERROR HvSetupVmcsDefaults(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_
 
 	/*
 	 * Capture the current state of special registers of the processor.
-	 * These values will be used to correctly setup initial values in the VMCS.
+	 * These values will be used to correctly setup initial values in the VMCS to match the current
+	 * running host.
 	 */
 	ArchCaptureSpecialRegisters(&Context->InitialSpecialRegisters);
-	
-	return 0;
+
+	// Setup all of the control fields of the VMCS
+	VmError |= HvSetupVmcsControlFields(Context);
+
+	if(VmError != 0)
+	{
+		HvUtilLogError("HvSetupVmcsControlFields: VmError = %i", VmError);
+		return FALSE;
+	}
+		
+	// Setup the guest area of the VMCS
+	VmError |= HvSetupVmcsGuestArea(Context, 0, 0);
+
+	if (VmError != 0)
+	{
+		HvUtilLogError("HvSetupVmcsGuestArea: VmError = %i", VmError);
+		return FALSE;
+	}
+
+	return VmError == 0;
 }
 
 /*
@@ -30,6 +50,8 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 {
 	VMX_SEGMENT_DESCRIPTOR SegmentDescriptor;
 	VMX_ERROR VmError;
+
+	VmError = 0;
 
 	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, SegmentSelector);
 
@@ -65,14 +87,14 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 /*
  * Sets up all fields of the guest area of the VMCS.
  */
-VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP)
+VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP)
 {
 	PREGISTER_CONTEXT Registers;
 	VMX_ERROR VmError;
 	SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister;
 	PIA32_SPECIAL_REGISTERS SpecialRegisters;
 
-	UNREFERENCED_PARAMETER(GlobalContext);
+	VmError = 0;
 
 	/*
 	 * Registers as they were when we began setup. Used to get segment selector values.
@@ -144,7 +166,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR
 	//VmxVmwriteFieldFromImmediate(VMCS_GUEST_PERF_GLOBAL_CTRL, SpecialRegisters->GlobalPerfControlMsr);
 	//VmxVmwriteFieldFromRegister(VMCS_GUEST_PAT, SpecialRegisters->PatMsr);
 	//VmxVmwriteFieldFromRegister(VMCS_GUEST_EFER, SpecialRegisters->EferMsr);
-	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SMBASE, SpecialRegisters->SmramBaseMsr);
+	//VmxVmwriteFieldFromImmediate(VMCS_GUEST_SMBASE, SpecialRegisters->SmramBaseMsr);
 
 
 	/*
@@ -183,16 +205,17 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR
 	return VmError;
 }
 
-VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCESSOR_CONTEXT Context)
+VMX_ERROR HvSetupVmcsControlFields(PVMM_PROCESSOR_CONTEXT Context)
 {
 	VMX_ERROR VmError;
 
+	VmError = 0;
 
 	/////////////////////////////// Pin-based Control ///////////////////////////////
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_PIN_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlPinBased(GlobalContext));
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_PIN_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlPinBased(Context));
 
 	/////////////////////////////// Processor-Based VM-Execution Controls ///////////////////////////////
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlProcessor(GlobalContext));
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlProcessor(Context));
 
 	/*
 	 * No vmexits on any exceptions.
@@ -227,7 +250,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_CR3_TARGET_COUNT, 0);
 
 	/////////////////////////////// VM-Exit Controls ///////////////////////////////
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMEXIT_CONTROLS, HvSetupVmcsControlVmExit(GlobalContext));
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMEXIT_CONTROLS, HvSetupVmcsControlVmExit(Context));
 
 	/*
 	 * Default the MSR store/load fields to 0, as we are not storing or loading any MSRs on exit.
@@ -237,7 +260,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 
 
 	/////////////////////////////// VM-Entry Controls ///////////////////////////////
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMENTRY_CONTROLS, HvSetupVmcsControlVmEntry(GlobalContext));
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_VMENTRY_CONTROLS, HvSetupVmcsControlVmEntry(Context));
 
 	/*
 	 * Default the MSR load fields to 0, as we are not loading any MSRs on entry.
@@ -260,7 +283,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VMENTRY_EXCEPTION_ERROR_CODE, 0);
 
 	/////////////////////////////// Secondary Processor-Based VM-Execution Controls ///////////////////////////////
-	VmxVmwriteFieldFromRegister(VMCS_CTRL_SECONDARY_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlSecondaryProcessor(GlobalContext));
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_SECONDARY_PROCESSOR_BASED_VM_EXECUTION_CONTROLS, HvSetupVmcsControlSecondaryProcessor(Context));
 
 	/*
 	 * MSR bitmap defines which MSRs in a certain usable range will cause exits.
@@ -282,7 +305,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_GLOBAL_CONTEXT GlobalContext, PVMM_PROCE
 /*
  * Configure the Pin-based Control settings of the VMCS.
  */
-IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_GLOBAL_CONTEXT GlobalContext)
+IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_PROCESSOR_CONTEXT Context)
 {
 	IA32_VMX_PINBASED_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -297,7 +320,7 @@ IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_GLOBAL_CONTEXT G
 	 * 
 	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
 	 */
-	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	if (Context->GlobalContext->VmxCapabilities.VmxControls == 1)
 	{
 		// We can use the true MSR to set the default/reserved values.
 		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_PINBASED_CTLS);
@@ -317,7 +340,7 @@ IA32_VMX_PINBASED_CTLS_REGISTER HvSetupVmcsControlPinBased(PVMM_GLOBAL_CONTEXT G
 /*
  * Configure the Processor-Based VM-Execution Controls of the VMCS.
  */
-IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_GLOBAL_CONTEXT GlobalContext)
+IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_PROCESSOR_CONTEXT Context)
 {
 	IA32_VMX_PROCBASED_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -363,7 +386,7 @@ IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_GLOBAL_CONTEXT
 	 *
 	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
 	 */
-	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	if (Context->GlobalContext->VmxCapabilities.VmxControls == 1)
 	{
 		// We can use the true MSR to set the default/reserved values.
 		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_PROCBASED_CTLS);
@@ -383,12 +406,12 @@ IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_GLOBAL_CONTEXT
 /*
  * Configure the Secondary Processor-Based VM-Execution Controls settings of the VMCS.
  */
-IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_GLOBAL_CONTEXT GlobalContext)
+IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_PROCESSOR_CONTEXT Context)
 {
 	IA32_VMX_PROCBASED_CTLS2_REGISTER Register;
 	SIZE_T ConfigMSR;
 
-	UNREFERENCED_PARAMETER(GlobalContext);
+	UNREFERENCED_PARAMETER(Context);
 
 	// Start with default 0 in all bits.
 	Register.Flags = 0;
@@ -458,7 +481,7 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_GLOB
 /*
  * Configure the VM-Entry Controls settings of the VMCS.
  */
-IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_GLOBAL_CONTEXT GlobalContext)
+IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_PROCESSOR_CONTEXT Context)
 {
 	IA32_VMX_ENTRY_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -495,7 +518,7 @@ IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_GLOBAL_CONTEXT Globa
 	 *
 	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
 	 */
-	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	if (Context->GlobalContext->VmxCapabilities.VmxControls == 1)
 	{
 		// We can use the true MSR to set the default/reserved values.
 		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_ENTRY_CTLS);
@@ -516,7 +539,7 @@ IA32_VMX_ENTRY_CTLS_REGISTER HvSetupVmcsControlVmEntry(PVMM_GLOBAL_CONTEXT Globa
 /*
  * Configure the VM-Exit Controls settings of the VMCS.
  */
-IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_GLOBAL_CONTEXT GlobalContext)
+IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_PROCESSOR_CONTEXT Context)
 {
 	IA32_VMX_EXIT_CTLS_REGISTER Register;
 	SIZE_T ConfigMSR;
@@ -554,7 +577,7 @@ IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_GLOBAL_CONTEXT GlobalC
 	 *
 	 * If the processor supports the new, "true" MSR, then use that one. Otherwise, fallback on the old one.
 	 */
-	if (GlobalContext->VmxCapabilities.VmxControls == 1)
+	if (Context->GlobalContext->VmxCapabilities.VmxControls == 1)
 	{
 		// We can use the true MSR to set the default/reserved values.
 		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_ENTRY_CTLS);
