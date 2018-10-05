@@ -4,7 +4,7 @@
 #include "util.h"
 #include "vmx.h"
 
-BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context)
+BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T HostRSP, SIZE_T GuestRIP, SIZE_T GuestRSP)
 {
 	VMX_ERROR VmError;
 
@@ -32,7 +32,7 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context)
 	}
 		
 	// Setup the guest area of the VMCS
-	VmError |= HvSetupVmcsGuestArea(Context, 0, 0);
+	VmError |= HvSetupVmcsGuestArea(Context, GuestRIP, GuestRSP);
 
 	if (VmError != 0)
 	{
@@ -40,9 +40,113 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context)
 		return FALSE;
 	}
 
+	// Setup the host area of the VMCS
+	VmError |= HvSetupVmcsHostArea(Context, HostRIP, HostRSP);
+
+	if (VmError != 0)
+	{
+		HvUtilLogError("HvSetupVmcsHostArea: VmError = %i", VmError);
+		return FALSE;
+	}
+
 	return VmError == 0;
 }
 
+/*
+ * Calls VmxGetSegmentDescriptorFromSelector to decode the segment descriptor into VMX-ready values.
+ * 
+ * Sets the Selector and Base fields of the Host VMCS given the segment
+ */
+#define VMCS_SETUP_HOST_SEGMENTATION(_SEGMENT_NAME_UPPER_, _REGISTER_VALUE_) \
+	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, _REGISTER_VALUE_, TRUE); \
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_##_SEGMENT_NAME_UPPER_##_SELECTOR, SegmentDescriptor.Selector); \
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_##_SEGMENT_NAME_UPPER_##_BASE, SegmentDescriptor.BaseAddress);
+
+ /*
+  * Calls VmxGetSegmentDescriptorFromSelector to decode the segment descriptor into VMX-ready values.
+  *
+  * Sets the Selector field the Host VMCS given the segment.
+  */
+#define VMCS_SETUP_HOST_SEGMENTATION_NOBASE(_SEGMENT_NAME_UPPER_, _REGISTER_VALUE_) \
+	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, _REGISTER_VALUE_, TRUE); \
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_##_SEGMENT_NAME_UPPER_##_SELECTOR, SegmentDescriptor.Selector); \
+
+/*
+* Sets up all fields of the host area of the VMCS.
+* 
+* HostRIP: The RIP that vmexits will jump to initially, similar to how interrupts work.
+* HostRSP: The RSP value to use when the vmexit is fired.
+*/
+VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T HostRSP)
+{
+	VMX_ERROR VmError;
+	PIA32_SPECIAL_REGISTERS SpecialRegisters;
+	PREGISTER_CONTEXT Registers;
+	SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister;
+	VMX_SEGMENT_DESCRIPTOR SegmentDescriptor;
+
+	VmError = 0;
+
+	/*
+	 * Registers as they were when we began setup. Used to get segment selector values.
+	 */
+	Registers = &Context->InitialRegisters;
+
+	/*
+	 * Special registers of the host, such as control registers (CR0, CR4)
+	 */
+	SpecialRegisters = &Context->InitialSpecialRegisters;
+
+	/*
+	 * Grab the GDTR for the current running system.
+	 */
+	GdtRegister = SpecialRegisters->GlobalDescriptorTableRegister;
+
+
+	/* CR0, CR3, and CR4 (64 bits each; 32 bits on processors that do not support Intel 64 architecture) */
+	VmxVmwriteFieldFromRegister(VMCS_HOST_CR0, SpecialRegisters->ControlRegister0);
+	VmxVmwriteFieldFromRegister(VMCS_HOST_CR3, SpecialRegisters->ControlRegister3);
+	VmxVmwriteFieldFromRegister(VMCS_HOST_CR4, SpecialRegisters->ControlRegister4);
+
+	/* RSP and RIP (64 bits each; 32 bits on processors that do not support Intel 64 architecture). */
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_RIP, HostRIP);
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_RSP, HostRSP);
+
+	/* 
+	 * Selector fields (16 bits each) for the segment registers CS, SS, DS, ES, FS, GS, and TR. There is no field in the
+	 * host-state area for the LDTR selector
+	 */
+
+	// TODO: Totally refactor segmentation setup
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(CS, Registers->SegES);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(SS, Registers->SegES);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(DS, Registers->SegES);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(ES, Registers->SegES);
+	VMCS_SETUP_HOST_SEGMENTATION(FS, Registers->SegFS);
+	VMCS_SETUP_HOST_SEGMENTATION(GS, Registers->SegGS);
+	VMCS_SETUP_HOST_SEGMENTATION(TR, SpecialRegisters->TaskRegister);
+
+	/*
+	 * Copy required architecture MSRs to the guest.
+	 * 
+	 * The following MSRs:
+	 *	— IA32_SYSENTER_CS (32 bits)
+	 *	— IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits; 32 bits on processors that do not support Intel 64
+	 *	architecture).
+	 *	— IA32_PERF_GLOBAL_CTRL (64 bits). This field is supported only on processors that support the 1-setting of
+	 *	the “load IA32_PERF_GLOBAL_CTRL” VM-exit control.
+	 *	— IA32_PAT (64 bits). This field is supported only on processors that support the 1-setting of the “load
+	 *	IA32_PAT” VM-exit control.
+	 *	— IA32_EFER (64 bits). This field is supported only on processors that support the 1-setting of the “load
+	 *	IA32_EFER” VM-exit control.
+	 */
+
+	VmxVmwriteFieldFromRegister(VMCS_SYSENTER_CS, SpecialRegisters->SysenterCsMsr);
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_SYSENTER_ESP, SpecialRegisters->SysenterEspMsr);
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_SYSENTER_EIP, SpecialRegisters->SysenterEipMsr);
+
+	return VmError;
+}
 /*
  * Very carefully populates the segmentation parts of one of the guest segmentation VMCS fields according to the values of the currently running system.
  */
@@ -53,7 +157,7 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 
 	VmError = 0;
 
-	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, SegmentSelector);
+	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, SegmentSelector, FALSE);
 
 	/*
 	 * The following fields for each of the registers CS, SS, DS, ES, FS, GS, LDTR, and TR:
@@ -65,9 +169,10 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 	 *  — Access rights (32 bits). The format of this field is given in Table 24-2 and detailed as follows
 	 */
 	VmxVmwriteFieldFromImmediate(VmcsSelector, SegmentDescriptor.Selector);
+	VmxVmwriteFieldFromImmediate(VmcsBase, SegmentDescriptor.BaseAddress);
+
 	VmxVmwriteFieldFromImmediate(VmcsLimit, SegmentDescriptor.SegmentLimit);
 	VmxVmwriteFieldFromRegister(VmcsAccessRights, SegmentDescriptor.AccessRights);
-	VmxVmwriteFieldFromImmediate(VmcsBase, SegmentDescriptor.BaseAddress);
 
 	return VmError;
 }
@@ -86,6 +191,9 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 
 /*
  * Sets up all fields of the guest area of the VMCS.
+ * 
+ * GuestRIP: The RIP to set when swapping back to the guest.
+ * GuestRSP: The RSP to set when swapping back to the guest. 
  */
 VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP)
 {
@@ -133,6 +241,8 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	 * 
 	 * See #define directly above. Simply calls HvSetupVmcsGuestSegment.
 	 */
+
+	// TODO: Totally refactor segmentation setup
 	VMCS_SETUP_GUEST_SEGMENTATION(ES, Registers->SegES);
 	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);
 	VMCS_SETUP_GUEST_SEGMENTATION(SS, Registers->SegSS);

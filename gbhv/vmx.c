@@ -1,10 +1,50 @@
 #include "vmx.h"
 #include "vmm.h"
 
+/*
+ * In VMX operation, processors may fix certain bits in CR0 and CR4 to specific values and not support other
+ * values.
+ * 
+ * Ensures these CR0 and CR4 values are set for old processors.
+ */
+VOID VmxSetFixedBits()
+{
+	CR0 ControlRegister0;
+	CR4 ControlRegister4;
+
+	ControlRegister0.Flags = __readcr0();
+	ControlRegister4.Flags = __readcr4();
+
+	// Set required fixed bits for cr0
+	ControlRegister0.Flags |= __readmsr(IA32_VMX_CR0_FIXED0);
+	ControlRegister0.Flags &= __readmsr(IA32_VMX_CR0_FIXED1);
+
+	// Set required fixed bits for cr4
+	ControlRegister4.Flags |= __readmsr(IA32_VMX_CR4_FIXED0);
+	ControlRegister4.Flags &= __readmsr(IA32_VMX_CR4_FIXED1);
+
+	// Apply to the processor
+	__writecr0(ControlRegister0.Flags);
+	__writecr4(ControlRegister4.Flags);
+}
+
+/*
+ * Enter VMX Root Mode on the processor.
+ * 
+ * This function will:
+ *	- Enable VMX-enabled bit in CR4
+ *	- Ensure the VMX fixed bits are set in CR0 and CR4
+ *	- Turn on VMX with VMXON instruction
+ *	- Clear the VMCS with VMXCLEAR instruction
+ *	- Load the VMCS pointer with VMXPTRLD
+ */
 BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
 	// Enable VMXe in CR4 of the processor
 	ArchEnableVmxe();
+
+	// Ensure the required fixed bits are set in cr0 and cr4, as per the spec.
+	VmxSetFixedBits();
 
 	HvUtilLogDebug("VmxOnRegion[#%i]: (V) 0x%llx / (P) 0x%llx [%i]", OsGetCurrentProcessorNumber(), Context->VmxonRegion, Context->VmxonRegionPhysical, (PUINT32)Context->VmxonRegion->VmcsRevisionNumber);
 
@@ -33,6 +73,14 @@ BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
 	return TRUE;
 }
 
+/*
+ * Exits VMX Root Mode on a processor currently in VMX operation mode.
+ * 
+ * This function will:
+ *	- Clear the current VMCS
+ *	- Execute VMXOFF
+ *	- Unset the VMX enabled bit in CR4
+ */
 BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
 	// And clear the VMCS before writing the configuration entries to it
@@ -58,7 +106,7 @@ BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
  * 
  * This allows the guest to continue using the same segments it was using prior to entering VMX mode.
  */
-VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector)
+VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector, BOOL ClearRPL)
 {
 	/*
 	 * Segment descriptor given by the OS.
@@ -106,10 +154,18 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	VmxSegmentDescriptor->SegmentLimit = (OsSegmentDescriptor->SegmentLimitHigh << 16) | OsSegmentDescriptor->SegmentLimitLow;
 
 	/*
+	 * Flag to clear the RPL of the selector.
+	 * Used to ensure consistency of the host state.
+	 */
+	if(ClearRPL)
+	{
+		SegmentSelector.RequestPrivilegeLevel = 0;
+	}
+
+	/*
 	 * Just copy straight from the selector we were given.
 	 */
 	VmxSegmentDescriptor->Selector = SegmentSelector.Flags;
-
 	/*
 	 * Copy over all of the access right values from the OS segment descriptor to the VMX descriptor.
 	 */

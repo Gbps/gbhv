@@ -5,6 +5,8 @@
 
 BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context);
 
+VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T HostRSP);
+
 VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, SIZE_T GuestRSP);
 
 VMX_ERROR HvSetupVmcsControlFields(PVMM_PROCESSOR_CONTEXT Context);
