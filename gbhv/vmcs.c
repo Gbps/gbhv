@@ -12,8 +12,9 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T 
 
 	/*
 	 * Capture the current state of gp, float, and xmm registers of the processor.
+	 * Some of these values are used to help setup the VMCS.
 	 */
-	ArchCaptureContext(&Context->InitialRegisters);
+	OsCaptureContext(&Context->InitialRegisters);
 
 	/*
 	 * Capture the current state of special registers of the processor.
@@ -105,7 +106,10 @@ VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SI
 
 	/* CR0, CR3, and CR4 (64 bits each; 32 bits on processors that do not support Intel 64 architecture) */
 	VmxVmwriteFieldFromRegister(VMCS_HOST_CR0, SpecialRegisters->ControlRegister0);
-	VmxVmwriteFieldFromRegister(VMCS_HOST_CR3, SpecialRegisters->ControlRegister3);
+
+	// Host CR3 is special because, due to the DPC, there might be a usermode process swapped into CR3. 
+	// We always want host to enter with the kernel's CR3 value, for consistency.
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_CR3, Context->GlobalContext->SystemDirectoryTableBase);
 	VmxVmwriteFieldFromRegister(VMCS_HOST_CR4, SpecialRegisters->ControlRegister4);
 
 	/* RSP and RIP (64 bits each; 32 bits on processors that do not support Intel 64 architecture). */

@@ -172,5 +172,8 @@
     <MASM Include="archdefs.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="vmxdefs.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

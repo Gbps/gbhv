@@ -1,5 +1,6 @@
 #include "os.h"
 #include "util.h"
+#include "arch.h"
 
 /*
  * Pool tag for memory allocations.
@@ -105,4 +106,20 @@ PVOID OsPhysicalToVirtual(PPHYSVOID PhysicalAddressIn)
 VOID OsZeroMemory(PVOID VirtualAddress, SIZE_T Length)
 {
 	RtlZeroMemory(VirtualAddress, Length);
+}
+
+/*
+ * OS-dependent version of RtlCaptureContext from NT.
+ */
+VOID OsCaptureContext(PREGISTER_CONTEXT ContextRecord)
+{
+	ArchCaptureContext(ContextRecord);
+}
+
+/*
+ * OS-dependent version of RtlRestoreContext from NT.
+ */
+VOID OsRestoreContext(PREGISTER_CONTEXT ContextRecord)
+{
+	RtlRestoreContext((PCONTEXT)ContextRecord, NULL);
 }

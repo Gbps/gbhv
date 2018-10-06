@@ -3,7 +3,7 @@
 #include "vmm.h"
 #include "vmx.h"
 
-BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context);
+BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T HostRSP, SIZE_T GuestRIP, SIZE_T GuestRSP);
 
 VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T HostRSP);
 

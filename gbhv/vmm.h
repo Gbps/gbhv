@@ -110,6 +110,15 @@ typedef struct _VMX_VMM_CONTEXT
 	 */
 	IA32_VMX_BASIC_REGISTER VmxCapabilities;
 
+	/*
+	 * The SYSTEM process DirectoryTableBase, or CR3 at the moment of kernel execution.
+	 * 
+	 * Saved here due to the fact that DPCs might execute with a usermode process address space.
+	 * 
+	 * We want to make sure the VMM restores host context in the SYSTEM process.
+	 */
+	SIZE_T SystemDirectoryTableBase;
+
 } VMM_CONTEXT, *PVMM_GLOBAL_CONTEXT;
 
 PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext);
@@ -125,7 +134,14 @@ VOID HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	_In_opt_ PVOID SystemArgument1,
 	_In_opt_ PVOID SystemArgument2);
 
-BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context);
+/*
+ * Defined in vmxdefs.asm.
+ * 
+ * Saves register contexts and calls HvInitialzeLogicalProcessor
+ */
+BOOL HvBeginInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context);
+
+VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRSP, SIZE_T GuestRIP);
 
 PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext);
 

@@ -78,3 +78,11 @@ LOGICAL
 KeSignalCallDpcSynchronize(
 	_In_ PVOID SystemArgument2
 );
+
+DECLSPEC_NORETURN
+NTSYSAPI
+VOID
+RtlRestoreContext(
+	_In_ PCONTEXT ContextRecord,
+	_In_opt_ struct _EXCEPTION_RECORD * ExceptionRecord
+);

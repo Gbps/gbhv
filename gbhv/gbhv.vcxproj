@@ -209,6 +209,7 @@
   </ItemGroup>
   <ItemGroup>
     <MASM Include="archdefs.asm" />
+    <MASM Include="vmxdefs.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

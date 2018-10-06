@@ -1,6 +1,7 @@
 #pragma once
 
 #include "extern.h"
+#include "arch.h"
 
 SIZE_T OsGetCPUCount();
 
@@ -19,3 +20,5 @@ PPHYSVOID OsVirtualToPhysical(PVOID VirtualAddress);
 PVOID OsPhysicalToVirtual(PPHYSVOID PhysicalAddress);
 
 VOID OsZeroMemory(PVOID VirtualAddress, SIZE_T Length);
+
+VOID OsCaptureContext(PREGISTER_CONTEXT ContextRecord);

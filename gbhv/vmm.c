@@ -84,6 +84,9 @@ PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
 	// Number of successful processor initializations
 	Context->SuccessfulInitializationsCount = 0;
 
+	// Save SYSTEM process DTB
+	Context->SystemDirectoryTableBase = __readcr3();
+
 	/*
 	 * Get capability MSRs and add them to the global context.
 	 */
@@ -272,10 +275,14 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
 
 	// Initialize processor for VMX
-	if(HvInitializeLogicalProcessor(CurrentContext))
+	if(HvBeginInitializeLogicalProcessor(CurrentContext))
 	{
 		// We were successful in initializing the processor
 		GlobalContext->SuccessfulInitializationsCount++;
+	}
+	else
+	{
+		HvUtilLogError("HvpDPCBroadcastFunction[#%i]: Failed to VMLAUNCH.", CurrentProcessorNumber);
 	}
 
 	// These must be called for GenericDpcCall to signal other processors
@@ -290,8 +297,12 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 
 /**
  * Initialize VMCS and enter VMX root-mode.
+ * 
+ * This function should never return, except on error. Execution will continue on the guest on success.
+ * 
+ * See: HvBeginInitializeLogicalProcessor and vmxdefs.asm.
  */
-BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context)
+VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRSP, SIZE_T GuestRIP)
 {
 	SIZE_T CurrentProcessorNumber;
 
@@ -302,17 +313,21 @@ BOOL HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context)
 	if (!VmxEnterRootMode(Context))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
-		return FALSE;
+		return;
 	}
 
-	if (!HvSetupVmcsDefaults(Context))
+	if (!HvSetupVmcsDefaults(Context, 0, 0, GuestRSP, GuestRIP))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
-		return FALSE;
+		return;
 	}
 
 	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
 
 	VmxExitRootMode(Context);
-	return TRUE;
+}
+
+VOID HvHostEnterFromGuest()
+{
+	
 }

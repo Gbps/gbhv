@@ -155,7 +155,7 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 
 	/*
 	 * Flag to clear the RPL of the selector.
-	 * Used to ensure consistency of the host state.
+	 * Used to ensure consistency of the VMX Host state.
 	 */
 	if(ClearRPL)
 	{
