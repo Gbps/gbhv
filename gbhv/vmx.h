@@ -63,13 +63,15 @@ BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context);
  * Used to write a vmcs field using vmwrite and an ia32-doc register type.
  */
 #define VmxVmwriteFieldFromRegister(_FIELD_DEFINE_, _REGISTER_VAR_) \
-	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _REGISTER_VAR_.Flags);
+	if( OsGetCurrentProcessorNumber() == 0 ) HvUtilLogDebug(#_FIELD_DEFINE_ " = 0x%llx", _REGISTER_VAR_.Flags); \
+	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _REGISTER_VAR_.Flags)
 
 /*
  * Used to write a vmcs field using vmwrite and an immediate value.
  */
 #define VmxVmwriteFieldFromImmediate(_FIELD_DEFINE_, _IMMEDIATE_) \
-	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _IMMEDIATE_);
+	if( OsGetCurrentProcessorNumber() == 0 ) HvUtilLogDebug(#_FIELD_DEFINE_ " = 0x%llx", _IMMEDIATE_); \
+	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _IMMEDIATE_)
 
 /*
  * Type of errors returned by vmx instructions (like vmwrite).

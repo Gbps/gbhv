@@ -176,11 +176,19 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	VmxSegmentDescriptor->BaseAddress &= 0xFFFFFFFF;
 
 	/*
+	 * If it's a System segment, treat it as a 64-bit base address.
+	 */
+	if(OsSegmentDescriptor->Type & 0x10)
+	{
+		VmxSegmentDescriptor->BaseAddress |= ((UINT64)OsSegmentDescriptor->BaseAddressUpper << 32);
+	}
+
+	/*
 	 * Populate the segment limit from the OS-defined base address.
 	 *
 	 * 20-bit value populated from the upper segment limit and lower segment limit fields.
 	 */
-	VmxSegmentDescriptor->SegmentLimit = (OsSegmentDescriptor->SegmentLimitHigh << 16) | OsSegmentDescriptor->SegmentLimitLow;
+	VmxSegmentDescriptor->SegmentLimit = __segmentlimit(SegmentSelector.Flags);
 
 	/*
 	 * Flag to clear the RPL of the selector.

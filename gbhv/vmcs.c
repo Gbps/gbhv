@@ -25,6 +25,7 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T 
 
 	// Setup all of the control fields of the VMCS
 	VmError |= HvSetupVmcsControlFields(Context);
+	HvUtilLogDebug("HvSetupVmcsControlFields: VmError = %i", VmError);
 
 	if(VmError != 0)
 	{
@@ -129,6 +130,10 @@ VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SI
 	VMCS_SETUP_HOST_SEGMENTATION(FS, Registers->SegFS);
 	VMCS_SETUP_HOST_SEGMENTATION(GS, Registers->SegGS);
 	VMCS_SETUP_HOST_SEGMENTATION(TR, SpecialRegisters->TaskRegister);
+
+	/* Populate GS and FS base from MSRs */
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_GS_BASE, __readmsr(IA32_GS_BASE));
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_FS_BASE, __readmsr(IA32_FS_BASE));
 
 	/*
 	 * Copy required architecture MSRs to the guest.
@@ -251,10 +256,14 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);
 	VMCS_SETUP_GUEST_SEGMENTATION(SS, Registers->SegSS);
 	VMCS_SETUP_GUEST_SEGMENTATION(DS, Registers->SegDS);
-	VMCS_SETUP_GUEST_SEGMENTATION(FS, Registers->SegFS);
 	VMCS_SETUP_GUEST_SEGMENTATION(GS, Registers->SegGS);
+	VMCS_SETUP_GUEST_SEGMENTATION(FS, Registers->SegFS);
 	VMCS_SETUP_GUEST_SEGMENTATION(LDTR, SpecialRegisters->LocalDescriptorTableRegister);
 	VMCS_SETUP_GUEST_SEGMENTATION(TR, SpecialRegisters->TaskRegister);
+
+	/* Populate GS and FS base from MSRs */
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_GS_BASE, __readmsr(IA32_GS_BASE));
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_FS_BASE, __readmsr(IA32_FS_BASE));
 
 	/*
 	 * Copy GDT descriptor register
@@ -271,6 +280,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	/*
 	 * Copy required architecture MSRs to the guest.
 	 */
+	// TODO: Make reserved bits of SpecialRegisters->DebugControlMsr zero
 	VmxVmwriteFieldFromRegister(VMCS_GUEST_DEBUGCTL, SpecialRegisters->DebugControlMsr);
 	VmxVmwriteFieldFromRegister(VMCS_GUEST_SYSENTER_CS, SpecialRegisters->SysenterCsMsr);
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_SYSENTER_EIP, SpecialRegisters->SysenterEipMsr);
@@ -412,6 +422,8 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_PROCESSOR_CONTEXT Context)
 
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR0_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister0);
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR4_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister4);
+
+	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VIRTUAL_PROCESSOR_IDENTIFIER, 1);
 
 	return VmError;
 }
@@ -588,6 +600,7 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_PROC
 	// Encode "must be 1" and "must be 0" bits.
 	Register.Flags = HvUtilEncodeMustBeBits(Register.Flags, ConfigMSR);
 
+
 	return Register;
 }
 
@@ -673,6 +686,7 @@ IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_PROCESSOR_CONTEXT Cont
 	 *  This control must be 0 on processors that do not support Intel 64 architecture.
 	 */
 	Register.HostAddressSpaceSize = 1;
+
 
 	/*
 	 * Why open another detection vector?

@@ -48,12 +48,11 @@ BOOL HvInitializeAllProcessors()
 
 	if(GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
 	{
+		// TODO: Move to driver uninitalization
+		HvFreeVmmContext(GlobalContext);
 		HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
 		return FALSE;
 	}
-
-	// TODO: Move to driver uninitalization
-	HvFreeVmmContext(GlobalContext);
 
 	HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
 	return TRUE;

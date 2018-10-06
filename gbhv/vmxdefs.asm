@@ -1,9 +1,6 @@
 
 EXTERN HvInitializeLogicalProcessor : PROC
 
-;DEBUG
-EXTERN VmxExitRootMode : PROC
-
 .CODE
 
 ; Saves all general purpose registers to the stack
@@ -52,9 +49,6 @@ ENDM
 
 
 HvBeginInitializeLogicalProcessor PROC
-	; DEBUG
-	push rcx
-
 	; Save floating point stack
 	pushfq
 
@@ -86,9 +80,6 @@ HvBeginInitializeLogicalProcessor PROC
 	; Restore floating point registers
 	popfq
 
-	; DEBUG
-	pop rcx
-
 	; Return unsucessful
 	mov rax, 0
 	ret
@@ -101,13 +92,6 @@ guest_resumes_here:
 
 	; Restore floating point registers
 	popfq
-
-	; DEBUG
-	pop rcx
-
-	add rsp, 20h
-	call VmxExitRootMode
-	sub rsp, 20h
 
 	mov rax, 1
 	ret
