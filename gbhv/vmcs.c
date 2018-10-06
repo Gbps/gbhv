@@ -694,12 +694,12 @@ IA32_VMX_EXIT_CTLS_REGISTER HvSetupVmcsControlVmExit(PVMM_PROCESSOR_CONTEXT Cont
 	if (Context->GlobalContext->VmxCapabilities.VmxControls == 1)
 	{
 		// We can use the true MSR to set the default/reserved values.
-		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_ENTRY_CTLS);
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_TRUE_EXIT_CTLS);
 	}
 	else
 	{
 		// Otherwise, use the defaults
-		ConfigMSR = ArchGetHostMSR(IA32_VMX_ENTRY_CTLS);
+		ConfigMSR = ArchGetHostMSR(IA32_VMX_EXIT_CTLS);
 	}
 
 	// Encode "must be 1" and "must be 0" bits.

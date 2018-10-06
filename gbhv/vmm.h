@@ -1,10 +1,10 @@
 #pragma once
 #include "extern.h"
+#include "vmm_settings.h"
 #include "msr.h"
 #include "arch.h"
 #include "util.h"
 #include "os.h"
-
 /*
  * Represents a VMXON region allocated for the processor to do internal state management.
  */
@@ -85,7 +85,12 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 */
 	IA32_SPECIAL_REGISTERS InitialSpecialRegisters;
 
-
+	/*
+	 * Stack space allocated for host operation.
+	 * 
+	 * During host operation, RSP = HostStack for the current logical processor.
+	 */
+	CHAR HostStack[VMM_SETTING_STACK_SPACE];
 } VMX_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
 
 typedef struct _VMX_VMM_CONTEXT

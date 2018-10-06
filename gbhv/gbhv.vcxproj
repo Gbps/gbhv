@@ -204,6 +204,7 @@
     <ClInclude Include="util.h" />
     <ClInclude Include="vmcs.h" />
     <ClInclude Include="vmm.h" />
+    <ClInclude Include="vmm_settings.h" />
     <ClInclude Include="vmx.h" />
     <ClInclude Include="arch.h" />
   </ItemGroup>

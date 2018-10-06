@@ -167,6 +167,9 @@
     <ClInclude Include="vmcs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vmm_settings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="archdefs.asm">

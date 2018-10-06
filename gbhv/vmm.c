@@ -1,7 +1,6 @@
 #include "vmm.h"
 #include "vmx.h"
 #include "vmcs.h"
-
 /**
  * Call HvInitializeLogicalProcessor on all processors using an Inter-Process Interrupt (IPI).
  * 
@@ -309,6 +308,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	// Get the current processor we're executing this function on right now
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
+
 	// Enable VMXe, execute VMXON and enter VMX root mode
 	if (!VmxEnterRootMode(Context))
 	{
@@ -316,18 +316,22 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 		return;
 	}
 
-	if (!HvSetupVmcsDefaults(Context, 0, 0, GuestRSP, GuestRIP))
+	// Setup VMCS with all values necessary to begin VMXLAUNCH
+	if (!HvSetupVmcsDefaults(Context, 0, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+		VmxExitRootMode(Context);
+		return;
+	}
+
+	// Launch the hypervisor...?
+	if (!VmxLaunchProcessor(Context))
+	{
+		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.", CurrentProcessorNumber);
 		return;
 	}
 
 	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
 
 	VmxExitRootMode(Context);
-}
-
-VOID HvHostEnterFromGuest()
-{
-	
 }

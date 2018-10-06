@@ -2,6 +2,35 @@
 #include "vmm.h"
 
 /*
+ * Execute VMLAUNCH and launch the processor.
+ * 
+ * Should never return, except on error.
+ */
+BOOL VmxLaunchProcessor(PVMM_PROCESSOR_CONTEXT Context)
+{
+	UINT64 failureCode;
+
+	failureCode = 0;
+
+	HvUtilLogDebug("VmxLaunchProcessor: VMLAUNCH....");
+
+	// Launch the VMCS! If this returns, there was an error.
+	// Otherwise, execution continues in guest_resumes_here from vmxdefs.asm
+	__vmx_vmlaunch();
+
+	// Read the failure code
+	if(__vmx_vmread(VMCS_VM_INSTRUCTION_ERROR, &failureCode) != 0)
+	{
+		HvUtilLogError("VmxLaunchProcessor: Failed to read error code.");
+	}
+	
+	HvUtilLogError("VmxLaunchProcessor: VMLAUNCH Error = 0x%llx", failureCode);
+
+	VmxExitRootMode(Context);
+
+	return FALSE;
+}
+/*
  * In VMX operation, processors may fix certain bits in CR0 and CR4 to specific values and not support other
  * values.
  * 
