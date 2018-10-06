@@ -48,6 +48,7 @@ typedef SEGMENT_DESCRIPTOR_64* PSEGMENT_DESCRIPTOR_64;
 
 typedef CR0* PCR0;
 typedef CR4* PCR4;
+typedef VMX_MSR_BITMAP* PVMX_MSR_BITMAP;
 
 /*
  * NT APIs for DPCs Generic Calls (that for some reason aren't in the WDK)

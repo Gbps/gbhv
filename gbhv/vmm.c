@@ -211,8 +211,14 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT Glo
 		return NULL;
 	}
 
+	/*
+	 * Allocate one page for MSR bitmap, all zeroes because we are not exiting on any MSRs.
+	 */
+	Context->MsrBitmap = OsAllocateContiguousAlignedPages(1);
+	OsZeroMemory(Context->MsrBitmap, PAGE_SIZE);
+
 	// Record the physical address of the MSR bitmap
-	Context->MsrBitmapPhysical = OsVirtualToPhysical(&Context->MsrBitmap);
+	Context->MsrBitmapPhysical = OsVirtualToPhysical(Context->MsrBitmap);
 
 	return Context;
 }

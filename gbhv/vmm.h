@@ -68,7 +68,7 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 * Contains a bitmap of MSR addresses that will cause exits.
 	 * If the bit is 1, that MSR address will cause an exit.
 	 */
-	VMX_MSR_BITMAP MsrBitmap;
+	PVMX_MSR_BITMAP MsrBitmap;
 
 	/*
 	 * Physical address of the MsrBitmap.
