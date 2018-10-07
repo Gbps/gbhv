@@ -1,5 +1,7 @@
 
 EXTERN HvInitializeLogicalProcessor : PROC
+EXTERN HvHandleVmExit : PROC
+EXTERN HvHandleVmExitFailure : PROC
 
 .CODE
 
@@ -86,8 +88,6 @@ HvBeginInitializeLogicalProcessor PROC
 
 ; If VMLAUNCH succeeds, execution will continue from `guest_resumes_here` in guest mode.
 guest_resumes_here:
-	;DEBUG
-	hlt
 
 	; Macro to restore GP registers
 	PopGeneralPurposeRegisterContext
@@ -109,7 +109,39 @@ HvEnterFromGuest PROC
 	; Macro to push all GP registers
 	PushGeneralPurposeRegisterContext
 
-	; First argument is 
+	; First argument is stack pointer here
+	mov rcx, rsp
+
+	; Call HvHandleVmExit to actually handle the
+	; incoming exit
+	sub rsp, 20h
+	call HvHandleVmExit
+	add rsp, 20h
+
+	; If it's not successful, we need to stop and figure out why
+	test al, al
+	jz handler_fail
+	
+	; Otherwise, restore registers and resume to guest
+	PopGeneralPurposeRegisterContext
+	vmresume
+
+	; If we get past vmresume, something bad happened and we need to figure out what
+	jmp handler_fail
+
+handler_fail:
+	pushfq
+	PushGeneralPurposeRegisterContext
+	mov rcx, rsp
+
+	sub rsp, 20h
+	call HvHandleVmExitFailure
+	add rsp, 20h
+
+fatal_error:
+	hlt
+	jmp	fatal_error
+
 HvEnterFromGuest ENDP
 
 END

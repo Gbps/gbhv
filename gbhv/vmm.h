@@ -146,6 +146,13 @@ VOID HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
  */
 BOOL HvBeginInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context);
 
+/*
+ * Defined in vmxdefs.asm.
+ *
+ * Saves register contexts and calls HvHandleVmExit
+ */
+VOID HvEnterFromGuest();
+
 VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRSP, SIZE_T GuestRIP);
 
 PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext);

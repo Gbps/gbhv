@@ -112,4 +112,64 @@ typedef struct _VMX_SEGMENT_DESCRIPTOR
 	VMX_SEGMENT_ACCESS_RIGHTS AccessRights;
 } VMX_SEGMENT_DESCRIPTOR, *PVMX_SEGMENT_DESCRIPTOR;
 
+/*
+ * From vmxdefs.asm:
+ * 
+ * Saved GP register context before calling into the vmexit handler.
+ * 
+ * 	pop	rax
+	pop	rcx
+	pop	rdx
+	pop	rbx
+	add	rsp, 8
+	pop	rbp
+	pop	rsi
+	pop	rdi
+	pop	r8
+	pop	r9
+	pop	r10
+	pop	r11
+	pop	r12
+	pop	r13
+	pop	r14
+	pop	r15
+ */
+typedef struct _GPREGISTER_CONTEXT
+{
+	SIZE_T RegisterRAX;
+	SIZE_T RegisterRCX;
+	SIZE_T RegisterRDX;
+	SIZE_T RegisterRBX;
+	SIZE_T RegisterRSP;
+	SIZE_T RegisterRBP;
+	SIZE_T RegisterRSI;
+	SIZE_T RegisterRDI;
+	SIZE_T RegisterR8;
+	SIZE_T RegisterR9;
+	SIZE_T RegisterR10;
+	SIZE_T RegisterR11;
+	SIZE_T RegisterR12;
+	SIZE_T RegisterR13;
+	SIZE_T RegisterR14;
+	SIZE_T RegisterR15;
+} GPREGISTER_CONTEXT, *PGPREGISTER_CONTEXT;
+
+#pragma warning(push, 0)
+typedef union _VMX_EXIT_REASON_FIELD_UNION
+{
+	struct _VMX_EXIT_REASON_FIELD
+	{
+		SIZE_T BasicExitReason : 16;
+		SIZE_T MustBeZero1 : 11;
+		SIZE_T WasInEnclaveMode : 1;
+		SIZE_T PendingMTFExit : 1;
+		SIZE_T ExitFromVMXRoot : 1;
+		SIZE_T MustBeZero2 : 1;
+		SIZE_T VmEntryFailure : 1;
+	};
+
+	SIZE_T Flags;
+} VMX_EXIT_REASON_FIELD, *PVMX_EXIT_REASON_FIELD;
+#pragma warning(pop)
+
 VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector, BOOL ClearRPL);

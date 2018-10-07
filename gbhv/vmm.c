@@ -325,7 +325,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	}
 
 	// Setup VMCS with all values necessary to begin VMXLAUNCH
-	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&__HALT_DEBUG, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
+	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
 		VmxExitRootMode(Context);
@@ -342,4 +342,42 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
 
 	VmxExitRootMode(Context);
+}
+
+BOOL HvHandleVmExit(PGPREGISTER_CONTEXT GuestRegisters)
+{
+	UNREFERENCED_PARAMETER(GuestRegisters);
+	KIRQL GuestIRQL;
+	SIZE_T GuestRSP;
+	SIZE_T GuestRIP;
+	SIZE_T GuestRFLAGS;
+	VMX_EXIT_REASON_FIELD GuestExitReason;
+	SIZE_T GuestExitQualification;
+
+	GuestIRQL = KeGetCurrentIrql();
+	if(GuestIRQL < DISPATCH_LEVEL)
+	{
+		KeRaiseIrqlToDpcLevel();
+	}
+
+	__vmx_vmread(VMCS_GUEST_RSP, &GuestRSP);
+	__vmx_vmread(VMCS_GUEST_RIP, &GuestRIP);
+	__vmx_vmread(VMCS_GUEST_RFLAGS, &GuestRFLAGS);
+	__vmx_vmread(VMCS_EXIT_REASON, &GuestExitReason.Flags);
+	__vmx_vmread(VMCS_EXIT_QUALIFICATION, &GuestExitQualification);
+
+	__debugbreak();
+
+
+	if(GuestIRQL < DISPATCH_LEVEL)
+	{
+		KeLowerIrql(GuestIRQL);
+	}
+
+	return TRUE;
+}
+
+VOID HvHandleVmExitFailure()
+{
+	__debugbreak();
 }
