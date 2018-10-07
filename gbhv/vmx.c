@@ -156,17 +156,15 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	/*
 	 * Index into the GDT to get a pointer to the segment descriptor for this segment.
 	 */
-	OsSegmentDescriptor = (PSEGMENT_DESCRIPTOR_64)(
-								(PSEGMENT_DESCRIPTOR_64*) GdtRegister.BaseAddress 
-														+ SegmentSelector.Index
-						  );
+	OsSegmentDescriptor = (PSEGMENT_DESCRIPTOR_64) (((UINT64) GdtRegister.BaseAddress) + (SegmentSelector.Index << 3));
+
 
 	/*
 	 * Populate the base address from the OS-defined base address.
 	 *
 	 * Populated from three address values stored in the GDT entry.
 	 */
-	VmxSegmentDescriptor->BaseAddress = (OsSegmentDescriptor->BaseAddressUpper << 24) |
+	VmxSegmentDescriptor->BaseAddress = (OsSegmentDescriptor->BaseAddressHigh << 24) |
 											(OsSegmentDescriptor->BaseAddressMiddle << 16) |
 											(OsSegmentDescriptor->BaseAddressLow);
 
@@ -178,7 +176,7 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	/*
 	 * If it's a System segment, treat it as a 64-bit base address.
 	 */
-	if(OsSegmentDescriptor->Type & 0x10)
+	if(OsSegmentDescriptor->DescriptorType == 0)
 	{
 		VmxSegmentDescriptor->BaseAddress |= ((UINT64)OsSegmentDescriptor->BaseAddressUpper << 32);
 	}

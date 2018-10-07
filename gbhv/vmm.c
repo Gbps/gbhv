@@ -299,6 +299,8 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	KeSignalCallDpcDone(SystemArgument1);
 }
 
+VOID __HALT_DEBUG();
+
 /**
  * Initialize VMCS and enter VMX root-mode.
  * 
@@ -313,6 +315,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	// Get the current processor we're executing this function on right now
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
+	if (OsGetCurrentProcessorNumber() == 0) __debugbreak();
 
 	// Enable VMXe, execute VMXON and enter VMX root mode
 	if (!VmxEnterRootMode(Context))
@@ -322,7 +325,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	}
 
 	// Setup VMCS with all values necessary to begin VMXLAUNCH
-	if (!HvSetupVmcsDefaults(Context, 0, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
+	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&__HALT_DEBUG, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
 		VmxExitRootMode(Context);

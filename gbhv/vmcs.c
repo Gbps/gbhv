@@ -123,9 +123,9 @@ VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SI
 	 */
 
 	// TODO: Totally refactor segmentation setup
-	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(CS, Registers->SegES);
-	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(SS, Registers->SegES);
-	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(DS, Registers->SegES);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(CS, Registers->SegCS);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(SS, Registers->SegSS);
+	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(DS, Registers->SegDS);
 	VMCS_SETUP_HOST_SEGMENTATION_NOBASE(ES, Registers->SegES);
 	VMCS_SETUP_HOST_SEGMENTATION(FS, Registers->SegFS);
 	VMCS_SETUP_HOST_SEGMENTATION(GS, Registers->SegGS);
@@ -134,6 +134,16 @@ VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SI
 	/* Populate GS and FS base from MSRs */
 	VmxVmwriteFieldFromImmediate(VMCS_HOST_GS_BASE, __readmsr(IA32_GS_BASE));
 	VmxVmwriteFieldFromImmediate(VMCS_HOST_FS_BASE, __readmsr(IA32_FS_BASE));
+
+	/*
+	 * Copy GDT descriptor register
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_GDTR_BASE, SpecialRegisters->GlobalDescriptorTableRegister.BaseAddress);
+
+	/*
+	 * Copy IDT descriptor register
+	 */
+	VmxVmwriteFieldFromImmediate(VMCS_HOST_IDTR_BASE, SpecialRegisters->InterruptDescriptorTableRegister.BaseAddress);
 
 	/*
 	 * Copy required architecture MSRs to the guest.
@@ -190,13 +200,11 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
  * Calls HvSetupVmcsGuestSegment with encoded VMCS values corresponding to that segment.
  */
 #define VMCS_SETUP_GUEST_SEGMENTATION(_SEGMENT_NAME_UPPER_, _REGISTER_VALUE_) \
-	VmError |= HvSetupVmcsGuestSegment(GdtRegister, \
-	_REGISTER_VALUE_, \
-	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_SELECTOR, \
-	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_LIMIT, \
-	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_ACCESS_RIGHTS, \
-	VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_BASE \
-	);
+	VmxGetSegmentDescriptorFromSelector(&SegmentDescriptor, GdtRegister, _REGISTER_VALUE_, FALSE); \
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_SELECTOR, SegmentDescriptor.Selector); \
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_BASE, SegmentDescriptor.BaseAddress); \
+	VmxVmwriteFieldFromImmediate(VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_LIMIT, SegmentDescriptor.SegmentLimit); \
+	VmxVmwriteFieldFromRegister(VMCS_GUEST_##_SEGMENT_NAME_UPPER_##_ACCESS_RIGHTS, SegmentDescriptor.AccessRights); \
 
 /*
  * Sets up all fields of the guest area of the VMCS.
@@ -210,6 +218,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	VMX_ERROR VmError;
 	SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister;
 	PIA32_SPECIAL_REGISTERS SpecialRegisters;
+	VMX_SEGMENT_DESCRIPTOR SegmentDescriptor;
 
 	VmError = 0;
 
@@ -252,6 +261,9 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	 */
 
 	// TODO: Totally refactor segmentation setup
+
+	HvUtilLogDebug("GdtRegister: 0x%llx, Base: 0x%llx, Limit: 0x%llx", GdtRegister, GdtRegister.BaseAddress, GdtRegister.Limit);
+
 	VMCS_SETUP_GUEST_SEGMENTATION(ES, Registers->SegES);
 	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);
 	VMCS_SETUP_GUEST_SEGMENTATION(SS, Registers->SegSS);

@@ -86,6 +86,8 @@ HvBeginInitializeLogicalProcessor PROC
 
 ; If VMLAUNCH succeeds, execution will continue from `guest_resumes_here` in guest mode.
 guest_resumes_here:
+	;DEBUG
+	hlt
 
 	; Macro to restore GP registers
 	PopGeneralPurposeRegisterContext
@@ -97,4 +99,18 @@ guest_resumes_here:
 	ret
 HvBeginInitializeLogicalProcessor ENDP
 
+; VM entry point. This is where the processor will start execution
+; when the VM exits. This function is responsible for saving all
+; guest registers to the stack, executes the vmexit handler, then
+; returns to the guest with VMRESUME. If VMRESUME does not take execution, there's an error
+; and we have to handle the VMRESUME failure.
+; Interrupts are automatically disabled for us at this point.
+HvEnterFromGuest PROC
+	; Macro to push all GP registers
+	PushGeneralPurposeRegisterContext
+
+	; First argument is 
+HvEnterFromGuest ENDP
+
 END
+

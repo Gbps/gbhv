@@ -1,20 +1,35 @@
 #include "vmm.h"
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
+VOID
+DriverUnload(
+	_In_ PDRIVER_OBJECT DriverObject
+);
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
-	UNREFERENCED_PARAMETER(DriverObject);
 	UNREFERENCED_PARAMETER(RegistryPath);
+
+	DriverObject->DriverUnload = DriverUnload;
 
 	HvUtilLog("--------------------------------------------------------------");
 
 	// Initialize Hypervisor
 	if(!HvInitializeAllProcessors())
 	{
-		return STATUS_DEVICE_BUSY;
+		// TODO: Fix this!!!!
+		return STATUS_SUCCESS;
 	}
 
-	// Do not keep driver loaded.
-	return STATUS_DEVICE_PAPER_EMPTY;
+	return STATUS_SUCCESS;
+}
+
+VOID
+DriverUnload(
+	_In_ PDRIVER_OBJECT DriverObject
+)
+{
+	UNREFERENCED_PARAMETER(DriverObject);
+
+	return;
 }

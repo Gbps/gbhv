@@ -88,4 +88,8 @@ ArchReadLocalDescriptorTableRegister PROC
 	ret
 ArchReadLocalDescriptorTableRegister ENDP
 
+__HALT_DEBUG PROC
+	hlt
+__HALT_DEBUG ENDP
+
 END
