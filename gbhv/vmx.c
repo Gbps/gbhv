@@ -151,6 +151,7 @@ VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescr
 	{
 		// Null or invalid GDT entry
 		VmxSegmentDescriptor->AccessRights.Unusable = 1;
+		return;
 	}
 
 	/*

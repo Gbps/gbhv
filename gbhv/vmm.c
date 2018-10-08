@@ -315,8 +315,6 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	// Get the current processor we're executing this function on right now
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
-	if (OsGetCurrentProcessorNumber() == 0) __debugbreak();
-
 	// Enable VMXe, execute VMXON and enter VMX root mode
 	if (!VmxEnterRootMode(Context))
 	{
