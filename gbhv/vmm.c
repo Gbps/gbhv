@@ -344,34 +344,53 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	VmxExitRootMode(Context);
 }
 
+/*
+ * This function is the main handler of all exits that take place during VMM execution.
+ * 
+ * This function is called from HvEnterFromGuest (defined in vmxdefs.asm). During HvEnterFromGuest,
+ * the state of the guest's registers are stored to the stack using inline asm, and given as a pointer in argument 1.
+ * The value of most guest gp registers can be accessed using the PGPREGISTER_CONTEXT, but GuestRSP must
+ * be read out of the VMCS due to the fact that, during the switch from guest to host, the HostRSP value
+ * was loaded from the host area VMCS, and the guest RSP was saved back to the guest area of the VMCS.
+ * 
+ * Defined in Section 27.2 RECORDING VM-EXIT INFORMATION AND UPDATING VM-ENTRY CONTROL FIELDS, exits have two main
+ * fields, one which describes what kind of exit just took place (ExitQualification) and the why it took place (ExitReason).
+ * By reading these two values, the exit handler can know exactly how to handle the exit properly.
+ * 
+ * When the exit handler is called by the CPU, interrupts are disabled. In order to call certain kernel api functions in Type 2, we will need to enable interrupts.
+ * Therefore, the first action the handler must take is to ensure execution of the handler is not executing below DISPATCH_LEVEL.
+ * This is to prevent the dispatcher from context switching away from our exit handler if we enable interrupts, potentially causing serious memory synchronization problems.
+ * 
+ * The action is to read exit information and certain guest registers (RSP, RIP, RFLAGS) from the VMCS with the VMREAD instruction.
+ * 
+ * 
+ */
 BOOL HvHandleVmExit(PGPREGISTER_CONTEXT GuestRegisters)
 {
-	UNREFERENCED_PARAMETER(GuestRegisters);
-	KIRQL GuestIRQL;
-	SIZE_T GuestRSP;
-	SIZE_T GuestRIP;
-	SIZE_T GuestRFLAGS;
-	VMX_EXIT_REASON_FIELD GuestExitReason;
-	SIZE_T GuestExitQualification;
+	VMEXIT_CONTEXT ExitContext;
 
-	GuestIRQL = KeGetCurrentIrql();
-	if(GuestIRQL < DISPATCH_LEVEL)
+	/*
+	 * Initialize all fields of the exit context, including reading relevant fields from the VMCS.
+	 */
+	VmxInitializeExitContext(&ExitContext, GuestRegisters);
+
+	/*
+	 * To prevent context switching while enabling interrupts, save IRQL here.
+	 */
+	ExitContext.SavedIRQL = KeGetCurrentIrql();
+	if (ExitContext.SavedIRQL < DISPATCH_LEVEL)
 	{
 		KeRaiseIrqlToDpcLevel();
 	}
 
-	__vmx_vmread(VMCS_GUEST_RSP, &GuestRSP);
-	__vmx_vmread(VMCS_GUEST_RIP, &GuestRIP);
-	__vmx_vmread(VMCS_GUEST_RFLAGS, &GuestRFLAGS);
-	__vmx_vmread(VMCS_EXIT_REASON, &GuestExitReason.Flags);
-	__vmx_vmread(VMCS_EXIT_QUALIFICATION, &GuestExitQualification);
-
 	__debugbreak();
 
-
-	if(GuestIRQL < DISPATCH_LEVEL)
+	/*
+	 * If we raised IRQL, lower it before returning to guest.
+	 */
+	if(ExitContext.SavedIRQL < DISPATCH_LEVEL)
 	{
-		KeLowerIrql(GuestIRQL);
+		KeLowerIrql(ExitContext.SavedIRQL);
 	}
 
 	return TRUE;

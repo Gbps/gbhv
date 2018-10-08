@@ -74,6 +74,20 @@ BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context);
 	VmError |= __vmx_vmwrite(_FIELD_DEFINE_, _IMMEDIATE_)
 
 /*
+ * Reads a value from the VMCS to a ia32-doc register type.
+ */
+#define VmxVmreadFieldToRegister(_FIELD_DEFINE_, _REGISTER_VAR_) \
+	VmError |= __vmx_vmread(_FIELD_DEFINE_, _REGISTER_VAR_.Flags); \
+	if (OsGetCurrentProcessorNumber() == 0) HvUtilLogDebug(#_FIELD_DEFINE_ " = 0x%llx", *(_REGISTER_VAR_.Flags))
+
+/*
+ * Reads a value from the VMCS to an immediate value.
+ */
+#define VmxVmreadFieldToImmediate(_FIELD_DEFINE_, _IMMEDIATE_) \
+	VmError |= __vmx_vmread(_FIELD_DEFINE_, _IMMEDIATE_); \
+	if (OsGetCurrentProcessorNumber() == 0) HvUtilLogDebug(#_FIELD_DEFINE_ " = 0x%llx", *(_IMMEDIATE_))
+
+/*
  * Type of errors returned by vmx instructions (like vmwrite).
  */
 typedef SIZE_T VMX_ERROR;
@@ -112,6 +126,23 @@ typedef struct _VMX_SEGMENT_DESCRIPTOR
 	VMX_SEGMENT_ACCESS_RIGHTS AccessRights;
 } VMX_SEGMENT_DESCRIPTOR, *PVMX_SEGMENT_DESCRIPTOR;
 
+#pragma warning(push, 0)
+typedef union _VMX_EXIT_REASON_FIELD_UNION
+{
+	struct _VMX_EXIT_REASON_FIELD
+	{
+		SIZE_T BasicExitReason : 16;
+		SIZE_T MustBeZero1 : 11;
+		SIZE_T WasInEnclaveMode : 1;
+		SIZE_T PendingMTFExit : 1;
+		SIZE_T ExitFromVMXRoot : 1;
+		SIZE_T MustBeZero2 : 1;
+		SIZE_T VmEntryFailure : 1;
+	};
+
+	SIZE_T Flags;
+} VMX_EXIT_REASON, *PVMX_EXIT_REASON;
+
 /*
  * From vmxdefs.asm:
  * 
@@ -136,40 +167,103 @@ typedef struct _VMX_SEGMENT_DESCRIPTOR
  */
 typedef struct _GPREGISTER_CONTEXT
 {
-	SIZE_T RegisterRAX;
-	SIZE_T RegisterRCX;
-	SIZE_T RegisterRDX;
-	SIZE_T RegisterRBX;
-	SIZE_T RegisterRSP;
-	SIZE_T RegisterRBP;
-	SIZE_T RegisterRSI;
-	SIZE_T RegisterRDI;
-	SIZE_T RegisterR8;
-	SIZE_T RegisterR9;
-	SIZE_T RegisterR10;
-	SIZE_T RegisterR11;
-	SIZE_T RegisterR12;
-	SIZE_T RegisterR13;
-	SIZE_T RegisterR14;
-	SIZE_T RegisterR15;
+	/* Populated from vmxdefs.asm */
+	SIZE_T GuestRAX;
+	SIZE_T GuestRCX;
+	SIZE_T GuestRDX;
+	SIZE_T GuestRBX;
+
+	/* Populated from VMCS */
+	SIZE_T GuestRSP;
+
+	/* Populated from vmxdefs.asm */
+	SIZE_T GuestRBP;
+	SIZE_T GuestRSI;
+	SIZE_T GuestRDI;
+	SIZE_T GuestR8;
+	SIZE_T GuestR9;
+	SIZE_T GuestR10;
+	SIZE_T GuestR11;
+	SIZE_T GuestR12;
+	SIZE_T GuestR13;
+	SIZE_T GuestR14;
+	SIZE_T GuestR15;
 } GPREGISTER_CONTEXT, *PGPREGISTER_CONTEXT;
 
-#pragma warning(push, 0)
-typedef union _VMX_EXIT_REASON_FIELD_UNION
-{
-	struct _VMX_EXIT_REASON_FIELD
-	{
-		SIZE_T BasicExitReason : 16;
-		SIZE_T MustBeZero1 : 11;
-		SIZE_T WasInEnclaveMode : 1;
-		SIZE_T PendingMTFExit : 1;
-		SIZE_T ExitFromVMXRoot : 1;
-		SIZE_T MustBeZero2 : 1;
-		SIZE_T VmEntryFailure : 1;
-	};
 
-	SIZE_T Flags;
-} VMX_EXIT_REASON_FIELD, *PVMX_EXIT_REASON_FIELD;
+typedef struct _VMEXIT_CONTEXT
+{
+	/*
+	 * General purpose register context pushed onto the stack by vmxdefs.asm in
+	 * HvEnterFromGuest.
+	 */
+	PGPREGISTER_CONTEXT GuestContext;
+
+	/*
+	 * The state of the instruction pointer at the time of exit. 
+	 * Read from the guest state of the VMCS and restored from this value before returning.
+	 */
+	SIZE_T GuestRIP;
+
+	/*
+	 * The state of the RFLAGS register at the time of exit.
+	 * Read from the guest state of the VMCS.
+	 */
+	union _GUEST_EFLAGS
+	{
+		SIZE_T RFLAGS;
+		EFLAGS EFLAGS;
+	} GuestFlags;
+
+	/*
+	 * Saved IRQL during exit handler.
+	 */
+	KIRQL SavedIRQL;
+
+	/*
+	 * The exit reason field. 
+	 * 
+	 * This field encodes the reason for the VM exit.
+	 * 
+	 * See 24.9.1 Basic VM-Exit Information.
+	 */
+	VMX_EXIT_REASON ExitReason;
+
+	/*
+	 * Exit qualification (64 bits; 32 bits on processors that do not support Intel 64 architecture). This field contains
+	 * additional information about the cause of VM exits due to the following: debug exceptions; page-fault
+	 * exceptions; start-up IPIs (SIPIs); task switches; INVEPT; INVLPG;INVVPID; LGDT; LIDT; LLDT; LTR; SGDT;
+	 * SIDT; SLDT; STR; VMCLEAR; VMPTRLD; VMPTRST; VMREAD; VMWRITE; VMXON; control-register accesses;
+	 * MOV DR; I/O instructions; and MWAIT. The format of the field depends on the cause of the VM exit. See Section
+	 * 27.2.1 for details.
+	 */
+	SIZE_T ExitQualification;
+
+	/*
+	 * The instruction length of an instruction that caused the exit.
+	 * 
+	 * The following instructions cause VM exits unconditionally:
+	 * INVEPT, INVVPID, VMCALL,VMCLEAR, VMLAUNCH, VMPTRLD, VMPTRST, VMRESUME, VMXOFF, and VMXON.
+	 * CPUID, GETSEC, INVD, and XSETBV.
+	 * 
+	 * VM-exit instruction length (32 bits). For VM exits resulting from instruction execution, this field receives the
+	 * length in bytes of the instruction whose execution led to the VM exit.1 See Section 27.2.4 for details of when
+	 * and how this field is used.
+	 */
+	SIZE_T InstructionLength;
+
+	/*
+	 * VM-exit instruction information (32 bits). This field is used for VM exits due to attempts to execute INS,
+	 * INVEPT, INVVPID, LIDT, LGDT, LLDT, LTR, OUTS, SIDT, SGDT, SLDT, STR, VMCLEAR, VMPTRLD, VMPTRST,
+	 * VMREAD, VMWRITE, or VMXON.2 The format of the field depends on the cause of the VM exit. See Section
+	 * 27.2.4 for details.
+	 */
+	SIZE_T InstructionInformation;
+
+} VMEXIT_CONTEXT, *PVMEXIT_CONTEXT;
+
 #pragma warning(pop)
 
 VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector, BOOL ClearRPL);
+
+VOID VmxInitializeExitContext(PVMEXIT_CONTEXT ExitContext, PGPREGISTER_CONTEXT GuestRegisters);
