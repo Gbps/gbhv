@@ -2,119 +2,130 @@
 #include "vmx.h"
 #include "vmcs.h"
 /**
- * Call HvInitializeLogicalProcessor on all processors using an Inter-Process Interrupt (IPI).
+ * Initialize all logical processors on the system for hypervisor execution.
  * 
- * All processors will stop executing until all processors have entered VMX root-mode.
+ * This function performs the following actions:
+ *      - Uses the CPUID instruction to verify that VMX is supported on the system.
+ *        (As in, check we're not loading the driver on an AMD chip)
+ *      - Checks the Feature Control MSR to ensure that the user's BIOS has enabled VT-X
+ *        (Some BIOS allows users to disable this feature)
+ *      - Allocates all relevant hypervisor structures. During Windows execution, this will
+ *        utilize kernel APIs to allocate some structures into the kernel pool and physical memory.
+ *      - On Windows, a DPC (Deferred Procedure Call) is queued on each processor to begin the next
+ *        step of initialization, one for each logical processor for VT-X execution.
+ *      - After each DPC is complete, this function returns TRUE if all processors successfully entered
+ *        VT-x mode.
  */
 BOOL HvInitializeAllProcessors()
 {
-	SIZE_T FeatureMSR;
-	PVMM_GLOBAL_CONTEXT GlobalContext;
+    SIZE_T FeatureMSR;
+    PVMM_GLOBAL_CONTEXT GlobalContext;
 
-	HvUtilLog("HvInitializeAllProcessors: Starting.");
+    HvUtilLog("HvInitializeAllProcessors: Starting.");
 
-	// Check if VMX support is enabled on the processor.
-	if (!ArchIsVMXAvailable())
-	{
-		HvUtilLogError("VMX is not a feture of this processor.");
-		return FALSE;
-	}
+    // Check if VMX support is enabled on the processor.
+    if (!ArchIsVMXAvailable())
+    {
+        HvUtilLogError("VMX is not a feture of this processor.");
+        return FALSE;
+    }
 
-	// Enable bits in MSR to enable VMXON instruction.
-	FeatureMSR = ArchGetHostMSR(MSR_IA32_FEATURE_CONTROL_ADDRESS);
+    // Enable bits in MSR to enable VMXON instruction.
+    FeatureMSR = ArchGetHostMSR(MSR_IA32_FEATURE_CONTROL_ADDRESS);
 
-	// The BIOS will lock the VMX bit on startup.
-	if(!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_VMX_LOCK))
-	{
-		HvUtilLogError("VMX support was not locked by BIOS.");
-		return FALSE;
-	}
+    // The BIOS will lock the VMX bit on startup.
+    if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_VMX_LOCK))
+    {
+        HvUtilLogError("VMX support was not locked by BIOS.");
+        return FALSE;
+    }
 
-	// VMX support can be configured to be disabled outside SMX.
-	// Check to ensure this isn't the case.
-	if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_ALLOW_VMX_OUTSIDE_SMX))
-	{
-		HvUtilLogError("VMX support was disabled outside of SMX operation by BIOS.");
-		return FALSE;
-	}
+    // VMX support can be configured to be disabled outside SMX.
+    // Check to ensure this isn't the case.
+    if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_ALLOW_VMX_OUTSIDE_SMX))
+    {
+        HvUtilLogError("VMX support was disabled outside of SMX operation by BIOS.");
+        return FALSE;
+    }
 
-	HvUtilLog("Total Processor Count: %i", OsGetCPUCount());
+    HvUtilLog("Total Processor Count: %i", OsGetCPUCount());
 
-	// Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
-	GlobalContext = HvAllocateVmmContext();
+    // Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
+    GlobalContext = HvAllocateVmmContext();
 
-	// Generates a DPC that makes all processors execute the broadcast function.
-	KeGenericCallDpc(HvpDPCBroadcastFunction, (PVOID)GlobalContext);
+    // Generates a DPC that makes all processors execute the broadcast function.
+    KeGenericCallDpc(HvpDPCBroadcastFunction, (PVOID)GlobalContext);
 
-	if(GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
-	{
-		// TODO: Move to driver uninitalization
-		HvFreeVmmContext(GlobalContext);
-		HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
-		return FALSE;
-	}
+    if (GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
+    {
+        // TODO: Move to driver uninitalization
+        HvFreeVmmContext(GlobalContext);
+        HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
+        return FALSE;
+    }
 
-	HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
-	return TRUE;
+    HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
+    return TRUE;
 }
 
 /*
  * Allocate the global VMM context used by all processors.
  * 
- * Allocates a logical processor context structure for each logical processor on the system.
- * 
- * Accesses capability MSRs to get information about the VMX execution environment.
+ * - Allocates a VMM_GLOBAL_CONTEXT structure, containing information about hv operations
+ *   that is independent of a single processor.
+ * - Allocates a VMM_PROCESSOR_CONTEXT structure for each logical processor, containing
+ *   information about hv operation for only that singular processor.
  */
 PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
 {
-	PVMM_GLOBAL_CONTEXT Context;
+    PVMM_GLOBAL_CONTEXT Context;
 
-	// Allocate the global context structure
-	Context = (PVMM_GLOBAL_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
-	if(!Context)
-	{
-		return NULL;
-	}
+    // Allocate the global context structure
+    Context = (PVMM_GLOBAL_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
+    if (!Context)
+    {
+        return NULL;
+    }
 
-	// Get count of all logical processors on the system
-	Context->ProcessorCount = OsGetCPUCount();
+    // Get count of all logical processors on the system
+    Context->ProcessorCount = OsGetCPUCount();
 
-	// Number of successful processor initializations
-	Context->SuccessfulInitializationsCount = 0;
+    // Number of successful processor initializations
+    Context->SuccessfulInitializationsCount = 0;
 
-	// Save SYSTEM process DTB
-	Context->SystemDirectoryTableBase = __readcr3();
+    // Save SYSTEM process DTB
+    Context->SystemDirectoryTableBase = __readcr3();
 
-	/*
+    /*
 	 * Get capability MSRs and add them to the global context.
 	 */
-	Context->VmxCapabilities = ArchGetBasicVmxCapabilities();
+    Context->VmxCapabilities = ArchGetBasicVmxCapabilities();
 
-	PVMM_PROCESSOR_CONTEXT* ProcessorContexts = OsAllocateNonpagedMemory(Context->ProcessorCount * sizeof(PVMM_PROCESSOR_CONTEXT));
-	if(!ProcessorContexts)
-	{
-		return NULL;
-	}
+    PVMM_PROCESSOR_CONTEXT *ProcessorContexts = OsAllocateNonpagedMemory(Context->ProcessorCount * sizeof(PVMM_PROCESSOR_CONTEXT));
+    if (!ProcessorContexts)
+    {
+        return NULL;
+    }
 
-	/*
+    /*
 	 * Allocate a logical processor context structure for each processor on the system.
 	 */
-	for (SIZE_T ProcessorNumber = 0; ProcessorNumber < Context->ProcessorCount; ProcessorNumber++)
-	{
-		ProcessorContexts[ProcessorNumber] = HvAllocateLogicalProcessorContext(Context);
-		if (ProcessorContexts[ProcessorNumber] == NULL)
-		{
-			HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to setup processor context.", ProcessorNumber);
-			return NULL;
-		}
+    for (SIZE_T ProcessorNumber = 0; ProcessorNumber < Context->ProcessorCount; ProcessorNumber++)
+    {
+        ProcessorContexts[ProcessorNumber] = HvAllocateLogicalProcessorContext(Context);
+        if (ProcessorContexts[ProcessorNumber] == NULL)
+        {
+            HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to setup processor context.", ProcessorNumber);
+            return NULL;
+        }
 
-		HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx]", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
-	}
+        HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx]", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
+    }
 
-	Context->AllProcessorContexts = ProcessorContexts;
-	HvUtilLog("VmcsRevisionNumber: %x", Context->VmxCapabilities.VmcsRevisionId);
+    Context->AllProcessorContexts = ProcessorContexts;
+    HvUtilLog("VmcsRevisionNumber: %x", Context->VmxCapabilities.VmcsRevisionId);
 
-	return Context;
+    return Context;
 }
 
 /*
@@ -122,20 +133,20 @@ PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
  */
 VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context)
 {
-	if(Context)
-	{
-		// Free each logical processor context
-		for(SIZE_T ProcessorNumber = 0; ProcessorNumber < Context->ProcessorCount; ProcessorNumber++)
-		{
-			HvFreeLogicalProcessorContext(Context->AllProcessorContexts[ProcessorNumber]);
-		}
+    if (Context)
+    {
+        // Free each logical processor context
+        for (SIZE_T ProcessorNumber = 0; ProcessorNumber < Context->ProcessorCount; ProcessorNumber++)
+        {
+            HvFreeLogicalProcessorContext(Context->AllProcessorContexts[ProcessorNumber]);
+        }
 
-		// Free the collection of pointers to processor contexts
-		OsFreeNonpagedMemory(Context->AllProcessorContexts);
+        // Free the collection of pointers to processor contexts
+        OsFreeNonpagedMemory(Context->AllProcessorContexts);
 
-		// Free the actual context struct
-		OsFreeNonpagedMemory(Context);
-	}
+        // Free the actual context struct
+        OsFreeNonpagedMemory(Context);
+    }
 }
 
 /*
@@ -143,88 +154,94 @@ VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context)
  */
 PVMXON_REGION HvAllocateVmxonRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
-	PVMXON_REGION Region;
+    PVMXON_REGION Region;
 
-	// See VMX_VMXON_NUMBER_PAGES documentation.
-	Region = (PVMXON_REGION)OsAllocateContiguousAlignedPages(VMX_VMXON_NUMBER_PAGES);
+    // See VMX_VMXON_NUMBER_PAGES documentation.
+    Region = (PVMXON_REGION)OsAllocateContiguousAlignedPages(VMX_VMXON_NUMBER_PAGES);
 
-	// Zero VMXON region just to be sure...
-	OsZeroMemory(Region, VMX_VMXON_NUMBER_PAGES * PAGE_SIZE);
+    // Zero VMXON region just to be sure...
+    OsZeroMemory(Region, VMX_VMXON_NUMBER_PAGES * PAGE_SIZE);
 
-	/*
+    /*
 	 * Initialize the version identifier in the VMXON region (the first 31 bits) with the VMCS revision identifier
 	 * reported by capability MSRs.
 	 *
 	 * Clear bit 31 of the first 4 bytes of the VMXON region. (Handled by OsZeroMemory above)
 	 */
 
-	Region->VmcsRevisionNumber = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
+    Region->VmcsRevisionNumber = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
 
-	return Region;
+    return Region;
 }
 
 /**
  * Allocates a logical processor context.
  * 
+ * Contains:
+ *      - VMXON region
+ *      - The Host stack, the stack used during exit handlers
+ *      - The default VMCS, configuring all aspects of hv operation
+ *      - MSR bitmap, containing a bitmap of MSRs to exit on
+ * 
  * Returns NULL on error.
  */
 PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
-	PVMM_PROCESSOR_CONTEXT Context;
+    PVMM_PROCESSOR_CONTEXT Context;
 
-	// Allocate some generic memory for our context
-	Context = (PVMM_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMX_PROCESSOR_CONTEXT));
-	if(!Context)
-	{
-		return NULL;
-	}
+    // Allocate some generic memory for our context
+    Context = (PVMM_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMX_PROCESSOR_CONTEXT));
+    if (!Context)
+    {
+        return NULL;
+    }
 
-	// Inititalize all fields to 0, including the stack
-	OsZeroMemory(Context, sizeof(VMX_PROCESSOR_CONTEXT));
+    // Inititalize all fields to 0, including the stack
+    OsZeroMemory(Context, sizeof(VMX_PROCESSOR_CONTEXT));
 
-	// Entry to refer back to the global context for simplicity
-	Context->GlobalContext = GlobalContext;
+    // Entry to refer back to the global context for simplicity
+    Context->GlobalContext = GlobalContext;
 
-	// Top of the host stack is the global context pointer.
-	// See: vmxdefs.h and the structure definition.
-	Context->HostStack.GlobalContext = GlobalContext;
+    // Top of the host stack is the global context pointer.
+    // See: vmxdefs.h and the structure definition.
+    Context->HostStack.GlobalContext = GlobalContext;
 
-	// Allocate and setup the VMXON region for this processor
-	Context->VmxonRegion = HvAllocateVmxonRegion(GlobalContext);
-	if(!Context->VmxonRegion)
-	{
-		return NULL;
-	}
+    // Allocate and setup the VMXON region for this processor
+    Context->VmxonRegion = HvAllocateVmxonRegion(GlobalContext);
+    if (!Context->VmxonRegion)
+    {
+        return NULL;
+    }
 
-	Context->VmxonRegionPhysical = OsVirtualToPhysical(Context->VmxonRegion);
-	if (!Context->VmxonRegionPhysical)
-	{
-		return NULL;
-	}
+    Context->VmxonRegionPhysical = OsVirtualToPhysical(Context->VmxonRegion);
+    if (!Context->VmxonRegionPhysical)
+    {
+        return NULL;
+    }
 
-	// Allocate and setup a blank VMCS region
-	Context->VmcsRegion = HvAllocateVmcsRegion(GlobalContext);
-	if(!Context->VmcsRegion)
-	{
-		return NULL;
-	}
+    // Allocate and setup a blank VMCS region
+    Context->VmcsRegion = HvAllocateVmcsRegion(GlobalContext);
+    if (!Context->VmcsRegion)
+    {
+        return NULL;
+    }
 
-	Context->VmcsRegionPhysical = OsVirtualToPhysical(Context->VmcsRegion);
-	if(!Context->VmcsRegionPhysical)
-	{
-		return NULL;
-	}
+    Context->VmcsRegionPhysical = OsVirtualToPhysical(Context->VmcsRegion);
+    if (!Context->VmcsRegionPhysical)
+    {
+        return NULL;
+    }
 
-	/*
+    /*
 	 * Allocate one page for MSR bitmap, all zeroes because we are not exiting on any MSRs.
 	 */
-	Context->MsrBitmap = OsAllocateContiguousAlignedPages(1);
-	OsZeroMemory(Context->MsrBitmap, PAGE_SIZE);
+    Context->MsrBitmap = OsAllocateContiguousAlignedPages(1);
+    OsZeroMemory(Context->MsrBitmap, PAGE_SIZE);
 
-	// Record the physical address of the MSR bitmap
-	Context->MsrBitmapPhysical = OsVirtualToPhysical(Context->MsrBitmap);
+    // Record the physical address of the MSR bitmap
+    Context->MsrBitmapPhysical = OsVirtualToPhysical(Context->MsrBitmap);
 
-	return Context;
+    return Context;
 }
 
 /*
@@ -232,20 +249,20 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT Glo
  */
 PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
-	PVMCS VmcsRegion;
+    PVMCS VmcsRegion;
 
-	// Allocate contiguous physical pages for the VMCS. See VMX_VMCS_NUMBER_PAGES.
-	VmcsRegion = (PVMCS)OsAllocateContiguousAlignedPages(VMX_VMCS_NUMBER_PAGES);
+    // Allocate contiguous physical pages for the VMCS. See VMX_VMCS_NUMBER_PAGES.
+    VmcsRegion = (PVMCS)OsAllocateContiguousAlignedPages(VMX_VMCS_NUMBER_PAGES);
 
-	// Initialize all fields to zero.
-	OsZeroMemory(VmcsRegion, VMX_VMCS_NUMBER_PAGES * PAGE_SIZE);
+    // Initialize all fields to zero.
+    OsZeroMemory(VmcsRegion, VMX_VMCS_NUMBER_PAGES * PAGE_SIZE);
 
-	/*
+    /*
 	 * Software should write the VMCS revision identifier to the VMCS region before using that region for a VMCS.
 	 */
-	VmcsRegion->RevisionId = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
+    VmcsRegion->RevisionId = (UINT32)GlobalContext->VmxCapabilities.VmcsRevisionId;
 
-	return VmcsRegion;
+    return VmcsRegion;
 }
 
 /*
@@ -253,11 +270,11 @@ PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
  */
 VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
 {
-	if(Context)
-	{
-		OsFreeContiguousAlignedPages(Context->VmxonRegion);
-		OsFreeNonpagedMemory(Context);
-	}
+    if (Context)
+    {
+        OsFreeContiguousAlignedPages(Context->VmxonRegion);
+        OsFreeNonpagedMemory(Context);
+    }
 }
 
 /*
@@ -265,61 +282,60 @@ VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
  */
 PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_GLOBAL_CONTEXT GlobalContext)
 {
-	SIZE_T CurrentProcessorNumber;
-	PVMM_PROCESSOR_CONTEXT CurrentContext;
+    SIZE_T CurrentProcessorNumber;
+    PVMM_PROCESSOR_CONTEXT CurrentContext;
 
-	// Get the current processor we're executing this function on right now
-	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
+    // Get the current processor we're executing this function on right now
+    CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
-	// Get the logical processor context that was allocated for this current processor
-	CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
+    // Get the logical processor context that was allocated for this current processor
+    CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
 
-	return CurrentContext;
+    return CurrentContext;
 }
 
 /**
- * Called by HvInitializeAllProcessors to initialize VMX on all processors.
+ * Called by HvInitializeAllProcessors to initialize VMX on a specific logical processor.
  */
 VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
-	_In_opt_ PVOID DeferredContext,
-	_In_opt_ PVOID SystemArgument1,
-	_In_opt_ PVOID SystemArgument2)
+                                   _In_opt_ PVOID DeferredContext,
+                                   _In_opt_ PVOID SystemArgument1,
+                                   _In_opt_ PVOID SystemArgument2)
 {
-	SIZE_T CurrentProcessorNumber;
-	PVMM_GLOBAL_CONTEXT GlobalContext;
-	PVMM_PROCESSOR_CONTEXT CurrentContext;
+    SIZE_T CurrentProcessorNumber;
+    PVMM_GLOBAL_CONTEXT GlobalContext;
+    PVMM_PROCESSOR_CONTEXT CurrentContext;
 
-	UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Dpc);
 
-	GlobalContext = (PVMM_GLOBAL_CONTEXT)DeferredContext;
+    GlobalContext = (PVMM_GLOBAL_CONTEXT)DeferredContext;
 
-	// Get the current processor number we're executing this function on right now
-	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
+    // Get the current processor number we're executing this function on right now
+    CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
-	// Get the logical processor context that was allocated for this current processor
-	CurrentContext = HvGetCurrentCPUContext(GlobalContext);
+    // Get the logical processor context that was allocated for this current processor
+    CurrentContext = HvGetCurrentCPUContext(GlobalContext);
 
-	// Initialize processor for VMX
-	if(HvBeginInitializeLogicalProcessor(CurrentContext))
-	{
-		// We were successful in initializing the processor
-		GlobalContext->SuccessfulInitializationsCount++;
-	}
-	else
-	{
-		HvUtilLogError("HvpDPCBroadcastFunction[#%i]: Failed to VMLAUNCH.", CurrentProcessorNumber);
-	}
+    // Initialize processor for VMX
+    if (HvBeginInitializeLogicalProcessor(CurrentContext))
+    {
+        // We were successful in initializing the processor
+        GlobalContext->SuccessfulInitializationsCount++;
+    }
+    else
+    {
+        HvUtilLogError("HvpDPCBroadcastFunction[#%i]: Failed to VMLAUNCH.", CurrentProcessorNumber);
+    }
 
-	// These must be called for GenericDpcCall to signal other processors
-	// SimpleVisor code shows this
+    // These must be called for GenericDpcCall to signal other processors
+    // SimpleVisor code shows how to do this
 
-	// Wait for all DPCs to synchronize at this point
-	KeSignalCallDpcSynchronize(SystemArgument2);
+    // Wait for all DPCs to synchronize at this point
+    KeSignalCallDpcSynchronize(SystemArgument2);
 
-	// Mark the DPC as being complete
-	KeSignalCallDpcDone(SystemArgument1);
+    // Mark the DPC as being complete
+    KeSignalCallDpcDone(SystemArgument1);
 }
-
 
 /**
  * Initialize VMCS and enter VMX root-mode.
@@ -330,122 +346,124 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
  */
 VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRSP, SIZE_T GuestRIP)
 {
-	SIZE_T CurrentProcessorNumber;
+    SIZE_T CurrentProcessorNumber;
 
-	// Get the current processor we're executing this function on right now
-	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
+    // Get the current processor we're executing this function on right now
+    CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
-	// Enable VMXe, execute VMXON and enter VMX root mode
-	if (!VmxEnterRootMode(Context))
-	{
-		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
-		return;
-	}
+    // Enable VMXe, execute VMXON and enter VMX root mode
+    if (!VmxEnterRootMode(Context))
+    {
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+        return;
+    }
 
-	// Setup VMCS with all values necessary to begin VMXLAUNCH
-	// &Context->HostStack.GlobalContext is also the top of the host stack
-	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack.GlobalContext, GuestRIP, GuestRSP))
-	{
-		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
-		VmxExitRootMode(Context);
-		return;
-	}
+    // Setup VMCS with all values necessary to begin VMXLAUNCH
+    // &Context->HostStack.GlobalContext is also the top of the host stack
+    if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack.GlobalContext, GuestRIP, GuestRSP))
+    {
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+        VmxExitRootMode(Context);
+        return;
+    }
 
-	// Launch the hypervisor...?
-	if (!VmxLaunchProcessor(Context))
-	{
-		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.", CurrentProcessorNumber);
-		return;
-	}
-
-	HvUtilLogSuccess("HvInitializeLogicalProcessor[#%i]: Successfully entered VMX Root Mode.", CurrentProcessorNumber);
-
-	VmxExitRootMode(Context);
+    // Launch the hypervisor! This function should not return if it is successful, as we continue execution
+    // on the guest.
+    if (!VmxLaunchProcessor(Context))
+    {
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.", CurrentProcessorNumber);
+        return;
+    }
 }
 
 /*
  * This function is the main handler of all exits that take place during VMM execution.
  * 
- * This function is called from HvEnterFromGuest (defined in vmxdefs.asm). During HvEnterFromGuest,
- * the state of the guest's registers are stored to the stack using inline asm, and given as a pointer in argument 1.
+ * This function is initially called from HvEnterFromGuest (defined in vmxdefs.asm). During HvEnterFromGuest,
+ * the state of the guest's registers are stored to the stack and given as a stack pointer in GuestRegisters.
  * The value of most guest gp registers can be accessed using the PGPREGISTER_CONTEXT, but GuestRSP must
  * be read out of the VMCS due to the fact that, during the switch from guest to host, the HostRSP value
- * was loaded from the host area VMCS, and the guest RSP was saved back to the guest area of the VMCS.
+ * replaced RSP. During the switch, GuestRSP was saved back to the guest area of the VMCS so we can access
+ * it with a VMREAD.
  * 
  * Defined in Section 27.2 RECORDING VM-EXIT INFORMATION AND UPDATING VM-ENTRY CONTROL FIELDS, exits have two main
- * fields, one which describes what kind of exit just took place (ExitQualification) and the why it took place (ExitReason).
- * By reading these two values, the exit handler can know exactly how to handle the exit properly.
+ * exit fields, one which describes what kind of exit just took place (ExitReason) and why it took place (ExitQualification).
+ * By reading these two values, the exit handler can know exactly what steps it should take to handle the exit properly.
  * 
- * When the exit handler is called by the CPU, interrupts are disabled. In order to call certain kernel api functions in Type 2, we will need to enable interrupts.
- * Therefore, the first action the handler must take is to ensure execution of the handler is not executing below DISPATCH_LEVEL.
- * This is to prevent the dispatcher from context switching away from our exit handler if we enable interrupts, potentially causing serious memory synchronization problems.
+ * When the exit handler is called by the CPU, interrupts are disabled. In order to call certain kernel api functions
+ * in Type 2, we will need to enable interrupts. Therefore, the first action the handler must take is to ensure execution 
+ * of the handler is not executing below DISPATCH_LEVEL. This is to prevent the dispatcher from context switching away 
+ * from our exit handler if we enable interrupts, potentially causing serious memory synchronization problems.
  * 
- * The action is to read exit information and certain guest registers (RSP, RIP, RFLAGS) from the VMCS with the VMREAD instruction.
+ * Next, a VMEXIT_CONTEXT is initialized with the exit information, including certain guest registers (RSP, RIP, RFLAGS) 
+ * from the VMCS.
  * 
- * This function is given two arguments from HvEnterFromGuest in vmxdefs.asm, the GlobalContext, which was saved to the top of the HostStack, and the
- * guest register context, which was pushed onto the stack during HvEnterFromGuest.
+ * This function is given two arguments from HvEnterFromGuest in vmxdefs.asm:
+ *      - The GlobalContext, which was saved to the top of the HostStack
+ *      - The guest register context, which was pushed onto the stack during HvEnterFromGuest.
  * 
  */
 BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
-	VMEXIT_CONTEXT ExitContext;
-	PVMM_PROCESSOR_CONTEXT ProcessorContext;
+    VMEXIT_CONTEXT ExitContext;
+    PVMM_PROCESSOR_CONTEXT ProcessorContext;
 
-	// Grab our logical processor context object for this processor
-	ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
+    // Grab our logical processor context object for this processor
+    ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
 
-	/*
+    /*
 	 * Initialize all fields of the exit context, including reading relevant fields from the VMCS.
 	 */
-	VmxInitializeExitContext(&ExitContext, GuestRegisters);
+    VmxInitializeExitContext(&ExitContext, GuestRegisters);
 
-	/*
+    /*
 	 * To prevent context switching while enabling interrupts, save IRQL here.
 	 */
-	ExitContext.SavedIRQL = KeGetCurrentIrql();
-	if (ExitContext.SavedIRQL < DISPATCH_LEVEL)
-	{
-		KeRaiseIrqlToDpcLevel();
-	}
+    ExitContext.SavedIRQL = KeGetCurrentIrql();
+    if (ExitContext.SavedIRQL < DISPATCH_LEVEL)
+    {
+        KeRaiseIrqlToDpcLevel();
+    }
 
-	__debugbreak();
+    __debugbreak();
 
-	/*
+    /*
 	 * If we raised IRQL, lower it before returning to guest.
 	 */
-	if(ExitContext.SavedIRQL < DISPATCH_LEVEL)
-	{
-		KeLowerIrql(ExitContext.SavedIRQL);
-	}
+    if (ExitContext.SavedIRQL < DISPATCH_LEVEL)
+    {
+        KeLowerIrql(ExitContext.SavedIRQL);
+    }
 
-	return TRUE;
+    return TRUE;
 }
 
 /*
- * If we're at this point, that means HvEnterFromGuest failed 
+ * If we're at this point, that means HvEnterFromGuest failed to enter back to the guest.
+ * Print out the error informaiton and some state of the processor for debugging purposes.
  */
 BOOL HvHandleVmExitFailure(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
-	PVMM_PROCESSOR_CONTEXT ProcessorContext;
+    PVMM_PROCESSOR_CONTEXT ProcessorContext;
 
-	UNREFERENCED_PARAMETER(GuestRegisters);
+    UNREFERENCED_PARAMETER(GuestRegisters);
 
-	// Grab our logical processor context object for this processor
-	ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
+    // Grab our logical processor context object for this processor
+    ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
 
-	HvUtilLogError("HvHandleVmExitFailure: Encountered vmexit error.");
+    HvUtilLogError("HvHandleVmExitFailure: Encountered vmexit error.");
 
-	// Print information about the error state
-	VmxPrintErrorState(ProcessorContext);
+    // Print information about the error state
+    VmxPrintErrorState(ProcessorContext);
 
-	// Exit root mode, since we cannot recover here
-	if(!VmxExitRootMode(ProcessorContext))
-	{
-		// We can't exit root mode? Ut oh. Things are real bad.
-		// Returning false here will halt the processor.
-		return FALSE;
-	}
+    // Exit root mode, since we cannot recover here
+    if (!VmxExitRootMode(ProcessorContext))
+    {
+        // We can't exit root mode? Ut oh. Things are real bad.
+        // Returning false here will halt the processor.
+        return FALSE;
+    }
 
-	// Continue execution in non-VMX mode.
-	return TRUE;
+    // Continue execution in non-VMX mode.
+    return TRUE;
 }
