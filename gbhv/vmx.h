@@ -267,3 +267,5 @@ typedef struct _VMEXIT_CONTEXT
 VOID VmxGetSegmentDescriptorFromSelector(PVMX_SEGMENT_DESCRIPTOR VmxSegmentDescriptor, SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SEGMENT_SELECTOR SegmentSelector, BOOL ClearRPL);
 
 VOID VmxInitializeExitContext(PVMEXIT_CONTEXT ExitContext, PGPREGISTER_CONTEXT GuestRegisters);
+
+VOID VmxPrintErrorState(PVMM_PROCESSOR_CONTEXT Context);

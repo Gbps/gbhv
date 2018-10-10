@@ -179,11 +179,15 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT Glo
 		return NULL;
 	}
 
-	// Inititalize all fields to 0
+	// Inititalize all fields to 0, including the stack
 	OsZeroMemory(Context, sizeof(VMX_PROCESSOR_CONTEXT));
 
 	// Entry to refer back to the global context for simplicity
 	Context->GlobalContext = GlobalContext;
+
+	// Top of the host stack is the global context pointer.
+	// See: vmxdefs.h and the structure definition.
+	Context->HostStack.GlobalContext = GlobalContext;
 
 	// Allocate and setup the VMXON region for this processor
 	Context->VmxonRegion = HvAllocateVmxonRegion(GlobalContext);
@@ -256,6 +260,23 @@ VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
 	}
 }
 
+/*
+ * Get the current CPU context object from the global context by reading the current processor number.
+ */
+PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_GLOBAL_CONTEXT GlobalContext)
+{
+	SIZE_T CurrentProcessorNumber;
+	PVMM_PROCESSOR_CONTEXT CurrentContext;
+
+	// Get the current processor we're executing this function on right now
+	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
+
+	// Get the logical processor context that was allocated for this current processor
+	CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
+
+	return CurrentContext;
+}
+
 /**
  * Called by HvInitializeAllProcessors to initialize VMX on all processors.
  */
@@ -276,7 +297,7 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	CurrentProcessorNumber = OsGetCurrentProcessorNumber();
 
 	// Get the logical processor context that was allocated for this current processor
-	CurrentContext = GlobalContext->AllProcessorContexts[CurrentProcessorNumber];
+	CurrentContext = HvGetCurrentCPUContext(GlobalContext);
 
 	// Initialize processor for VMX
 	if(HvBeginInitializeLogicalProcessor(CurrentContext))
@@ -299,7 +320,6 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	KeSignalCallDpcDone(SystemArgument1);
 }
 
-VOID __HALT_DEBUG();
 
 /**
  * Initialize VMCS and enter VMX root-mode.
@@ -323,7 +343,8 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 	}
 
 	// Setup VMCS with all values necessary to begin VMXLAUNCH
-	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack, GuestRIP, GuestRSP))
+	// &Context->HostStack.GlobalContext is also the top of the host stack
+	if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack.GlobalContext, GuestRIP, GuestRSP))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
 		VmxExitRootMode(Context);
@@ -361,11 +382,17 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
  * 
  * The action is to read exit information and certain guest registers (RSP, RIP, RFLAGS) from the VMCS with the VMREAD instruction.
  * 
+ * This function is given two arguments from HvEnterFromGuest in vmxdefs.asm, the GlobalContext, which was saved to the top of the HostStack, and the
+ * guest register context, which was pushed onto the stack during HvEnterFromGuest.
  * 
  */
-BOOL HvHandleVmExit(PGPREGISTER_CONTEXT GuestRegisters)
+BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
 	VMEXIT_CONTEXT ExitContext;
+	PVMM_PROCESSOR_CONTEXT ProcessorContext;
+
+	// Grab our logical processor context object for this processor
+	ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
 
 	/*
 	 * Initialize all fields of the exit context, including reading relevant fields from the VMCS.
@@ -394,7 +421,31 @@ BOOL HvHandleVmExit(PGPREGISTER_CONTEXT GuestRegisters)
 	return TRUE;
 }
 
-VOID HvHandleVmExitFailure()
+/*
+ * If we're at this point, that means HvEnterFromGuest failed 
+ */
+BOOL HvHandleVmExitFailure(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
-	__debugbreak();
+	PVMM_PROCESSOR_CONTEXT ProcessorContext;
+
+	UNREFERENCED_PARAMETER(GuestRegisters);
+
+	// Grab our logical processor context object for this processor
+	ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
+
+	HvUtilLogError("HvHandleVmExitFailure: Encountered vmexit error.");
+
+	// Print information about the error state
+	VmxPrintErrorState(ProcessorContext);
+
+	// Exit root mode, since we cannot recover here
+	if(!VmxExitRootMode(ProcessorContext))
+	{
+		// We can't exit root mode? Ut oh. Things are real bad.
+		// Returning false here will halt the processor.
+		return FALSE;
+	}
+
+	// Continue execution in non-VMX mode.
+	return TRUE;
 }

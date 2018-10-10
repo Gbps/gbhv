@@ -8,28 +8,42 @@
  */
 BOOL VmxLaunchProcessor(PVMM_PROCESSOR_CONTEXT Context)
 {
-	UINT64 failureCode;
-
-	failureCode = 0;
-
 	HvUtilLogDebug("VmxLaunchProcessor: VMLAUNCH....");
 
 	// Launch the VMCS! If this returns, there was an error.
 	// Otherwise, execution continues in guest_resumes_here from vmxdefs.asm
 	__vmx_vmlaunch();
 
-	// Read the failure code
-	if(__vmx_vmread(VMCS_VM_INSTRUCTION_ERROR, &failureCode) != 0)
-	{
-		HvUtilLogError("VmxLaunchProcessor: Failed to read error code.");
-	}
-	
-	HvUtilLogError("VmxLaunchProcessor: VMLAUNCH Error = 0x%llx", failureCode);
+	VmxPrintErrorState(Context);
 
 	VmxExitRootMode(Context);
 
 	return FALSE;
 }
+
+/*
+ * Give a printout when VMX instructions or vmexits fail.
+ * 
+ * Reads the instruction error from the VMCS.
+ */
+VOID VmxPrintErrorState(PVMM_PROCESSOR_CONTEXT Context)
+{
+	UINT64 FailureCode;
+
+	UNREFERENCED_PARAMETER(Context);
+
+	// TODO: Add register context
+
+	// Read the failure code
+	if (__vmx_vmread(VMCS_VM_INSTRUCTION_ERROR, &FailureCode) != 0)
+	{
+		HvUtilLogError("VmxPrintErrorState: Failed to read error code.");
+		return;
+	}
+
+	HvUtilLogError("VmxPrintErrorState: VMLAUNCH Error = 0x%llx", FailureCode);
+}
+
 /*
  * In VMX operation, processors may fix certain bits in CR0 and CR4 to specific values and not support other
  * values.

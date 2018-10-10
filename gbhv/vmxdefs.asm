@@ -8,6 +8,7 @@ EXTERN HvHandleVmExitFailure : PROC
 ; Saves all general purpose registers to the stack
 ; RSP is read from VMCS, so there's a placeholder.
 ; https://github.com/asamy/ksm/blob/e7e24931c9df26c33d6e2a0ea9a44c78d3ced7a6/vmx.asm#L41
+; Sizeof = 16 * 8 = 0x80
 PushGeneralPurposeRegisterContext MACRO
 	push r15
 	push r14
@@ -86,7 +87,7 @@ HvBeginInitializeLogicalProcessor PROC
 	mov rax, 0
 	ret
 
-; If VMLAUNCH succeeds, execution will continue from `guest_resumes_here` in guest mode.
+; If VMLAUNCH succeeds, execution will continue from `guest_resumes_here` in VMX Guest mode.
 guest_resumes_here:
 
 	; Macro to restore GP registers
@@ -109,8 +110,15 @@ HvEnterFromGuest PROC
 	; Macro to push all GP registers
 	PushGeneralPurposeRegisterContext
 
-	; First argument is stack pointer here
-	mov rcx, rsp
+	; Grab the PVMM_GLOBAL_CONTEXT pointer from the top of the host stack that we so lovingly put there
+	; for this moment!
+	; First argument (RCX) is the PVMM_GLOBAL_CONTEXT.
+	; The stack has been moved 0x80 bytes during PushGeneralPurposeRegisterContext
+	int 3
+	mov rcx, [rsp+080h]
+
+	; Second argument (RDX) is stack pointer, which is also the location of the general purpose registers
+	mov rdx, rsp
 
 	; Call HvHandleVmExit to actually handle the
 	; incoming exit
@@ -122,22 +130,54 @@ HvEnterFromGuest PROC
 	test al, al
 	jz handler_fail
 	
-	; Otherwise, restore registers and resume to guest
+	; Otherwise, restore registers before guest
 	PopGeneralPurposeRegisterContext
+
+	; Enter back into the guest. If this fails, it will continue to the next instruction.
+	; Otherwise, this will not return.
 	vmresume
 
 	; If we get past vmresume, something bad happened and we need to figure out what
 	jmp handler_fail
 
 handler_fail:
-	pushfq
+	
+	; Save our guest register state again
 	PushGeneralPurposeRegisterContext
-	mov rcx, rsp
 
+	; Grab the PVMM_GLOBAL_CONTEXT pointer from the top of the host stack that we so lovingly put there
+	; for this moment!
+	; First argument (RCX) is the PVMM_GLOBAL_CONTEXT.
+	; The stack has been moved 0x80 bytes during PushGeneralPurposeRegisterContex
+	mov rcx, [rsp+080h]
+
+	; Second argument (RDX) is stack pointer, which is also the location of the general purpose registers
+	mov rdx, rsp
+
+	; Save floating point stack
+	pushfq
+
+	; Shadow space
 	sub rsp, 20h
+
+	; Call failure handler. This will go ahead and disable VMX Root mode on this processor.
+	; Afterwards, the processor will remain in non-VMX mode. 
 	call HvHandleVmExitFailure
+
+	; Shadow space
 	add rsp, 20h
 
+	; If HvHandleVmExitFailure returns 0, something is horribly wrong.
+	; In that case, we'll just stick ourselves in a halt loop and hope the processor
+	; doesn't explode.
+	jz fatal_error
+
+	; Restore register context and continue in non-VMX mode.
+	popfq
+	PopGeneralPurposeRegisterContext
+	
+
+	ret
 fatal_error:
 	hlt
 	jmp	fatal_error
