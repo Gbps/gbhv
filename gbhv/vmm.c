@@ -1,6 +1,8 @@
 #include "vmm.h"
 #include "vmx.h"
 #include "vmcs.h"
+#include "exit.h"
+
 /**
  * Initialize all logical processors on the system for hypervisor execution.
  * 
@@ -407,6 +409,9 @@ BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
 {
     VMEXIT_CONTEXT ExitContext;
     PVMM_PROCESSOR_CONTEXT ProcessorContext;
+	BOOL Success;
+
+	Success = FALSE;
 
     // Grab our logical processor context object for this processor
     ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
@@ -415,6 +420,14 @@ BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
 	 * Initialize all fields of the exit context, including reading relevant fields from the VMCS.
 	 */
     VmxInitializeExitContext(&ExitContext, GuestRegisters);
+
+	/*
+	 * If we tried to enter but failed, we return false here so HvHandleVmExitFailure is called.
+	 */
+	if (ExitContext.ExitReason.VmEntryFailure == 1)
+	{
+		return FALSE;
+	}
 
     /*
 	 * To prevent context switching while enabling interrupts, save IRQL here.
@@ -425,7 +438,15 @@ BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
         KeRaiseIrqlToDpcLevel();
     }
 
-    __debugbreak();
+	/*
+	 * Handle our exit using the handler code inside of exit.c
+	 */
+	Success = HvExitDispatchFunction(ProcessorContext, &ExitContext);
+    if(!Success)
+    {
+		// TODO: More information
+		HvUtilLogError("Failed to handle exit.");
+    }
 
     /*
 	 * If we raised IRQL, lower it before returning to guest.
@@ -435,7 +456,7 @@ BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
         KeLowerIrql(ExitContext.SavedIRQL);
     }
 
-    return TRUE;
+    return Success;
 }
 
 /*
@@ -464,6 +485,6 @@ BOOL HvHandleVmExitFailure(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEX
         return FALSE;
     }
 
-    // Continue execution in non-VMX mode.
+    // Continue execution with VMX disabled.
     return TRUE;
 }

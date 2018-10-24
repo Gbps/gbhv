@@ -52,7 +52,7 @@ ENDM
 
 
 HvBeginInitializeLogicalProcessor PROC
-	; Save floating point stack
+	; Save EFLAGS
 	pushfq
 
 	; Macro to push all the GP registers
@@ -80,7 +80,7 @@ HvBeginInitializeLogicalProcessor PROC
 	; Macro to restore GP registers
 	PopGeneralPurposeRegisterContext
 
-	; Restore floating point registers
+	; Restore EFLAGS
 	popfq
 
 	; Return unsucessful
@@ -93,7 +93,7 @@ guest_resumes_here:
 	; Macro to restore GP registers
 	PopGeneralPurposeRegisterContext
 
-	; Restore floating point registers
+	; Restore EFLAGS
 	popfq
 
 	mov rax, 1
@@ -114,7 +114,6 @@ HvEnterFromGuest PROC
 	; for this moment!
 	; First argument (RCX) is the PVMM_GLOBAL_CONTEXT.
 	; The stack has been moved 0x80 bytes during PushGeneralPurposeRegisterContext
-	int 3
 	mov rcx, [rsp+080h]
 
 	; Second argument (RDX) is stack pointer, which is also the location of the general purpose registers
@@ -153,7 +152,7 @@ handler_fail:
 	; Second argument (RDX) is stack pointer, which is also the location of the general purpose registers
 	mov rdx, rsp
 
-	; Save floating point stack
+	; Save EFLAGS
 	pushfq
 
 	; Shadow space
@@ -175,6 +174,8 @@ handler_fail:
 	popfq
 	PopGeneralPurposeRegisterContext
 	
+	; TODO: Find some way to actually have this restore Guest RIP?
+	int 3
 	ret
 fatal_error:
 	hlt

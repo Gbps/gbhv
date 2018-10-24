@@ -160,6 +160,7 @@
   <ItemGroup>
     <ClCompile Include="arch.c" />
     <ClCompile Include="entry.c" />
+    <ClCompile Include="exit.c" />
     <ClCompile Include="os_nt.c" />
     <ClCompile Include="util.c" />
     <ClCompile Include="vmcs.c" />
@@ -167,6 +168,7 @@
     <ClCompile Include="vmx.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="exit.h" />
     <ClInclude Include="extern.h" />
     <ClInclude Include="msr.h" />
     <ClInclude Include="os.h" />

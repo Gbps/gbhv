@@ -48,6 +48,9 @@
     <ClCompile Include="vmcs.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="exit.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="vmm.h">
@@ -168,6 +171,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vmm_settings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="exit.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

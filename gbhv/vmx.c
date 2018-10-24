@@ -126,6 +126,8 @@ BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
  */
 BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
+	HvUtilLogError("Exiting VMX.");
+
     // Clear the VMCS before VMXOFF (Specification requires this)
     if (__vmx_vmclear((ULONGLONG *)&Context->VmcsRegionPhysical) != 0)
     {
@@ -133,11 +135,7 @@ BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
     }
 
     // Turn off VMX
-    if (__vmx_off() != 0)
-    {
-        HvUtilLogError("VMOFF failed.");
-        return FALSE;
-    }
+    __vmx_off();
 
     // Turn off VMXe in CR4
     ArchDisableVmxe();
