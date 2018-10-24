@@ -9,7 +9,7 @@ DriverUnload(
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 	UNREFERENCED_PARAMETER(RegistryPath);
-
+	
 	DriverObject->DriverUnload = DriverUnload;
 
 	HvUtilLog("--------------------------------------------------------------");

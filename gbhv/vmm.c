@@ -351,7 +351,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
 		return;
 	}
 
-	// Launch the hypervisor...?
+	// Launch the hypervisor
 	if (!VmxLaunchProcessor(Context))
 	{
 		HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.", CurrentProcessorNumber);

@@ -145,8 +145,7 @@ handler_fail:
 	; Save our guest register state again
 	PushGeneralPurposeRegisterContext
 
-	; Grab the PVMM_GLOBAL_CONTEXT pointer from the top of the host stack that we so lovingly put there
-	; for this moment!
+	; Grab the PVMM_GLOBAL_CONTEXT pointer
 	; First argument (RCX) is the PVMM_GLOBAL_CONTEXT.
 	; The stack has been moved 0x80 bytes during PushGeneralPurposeRegisterContex
 	mov rcx, [rsp+080h]
@@ -176,7 +175,6 @@ handler_fail:
 	popfq
 	PopGeneralPurposeRegisterContext
 	
-
 	ret
 fatal_error:
 	hlt
