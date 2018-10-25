@@ -109,6 +109,10 @@ VOID ArchCaptureSpecialRegisters(PIA32_SPECIAL_REGISTERS Registers)
     Registers->ControlRegister3.Flags = __readcr3();
     Registers->ControlRegister4.Flags = __readcr4();
 
+
+	// Enable XSETBV on host, or else we'll #GP on XSETBV exits.
+	Registers->ControlRegister4.OsXsave = 1;
+
     /*
 	 * Global Descriptor Table and Interrupt Descriptor Table
 	 */

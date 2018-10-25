@@ -309,7 +309,7 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
     PVMM_PROCESSOR_CONTEXT CurrentContext;
 
     UNREFERENCED_PARAMETER(Dpc);
-
+	
     GlobalContext = (PVMM_GLOBAL_CONTEXT)DeferredContext;
 
     // Get the current processor number we're executing this function on right now

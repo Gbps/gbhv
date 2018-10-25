@@ -23,14 +23,18 @@ BOOL HvExitDispatchFunction(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CON
 		 * GETSEC will never exit because we will never run in SMX mode.
 		 */
 	case VMX_EXIT_REASON_EXECUTE_CPUID:
-		return HvExitHandleCpuid(ProcessorContext, ExitContext);
+		HvExitHandleCpuid(ProcessorContext, ExitContext);
+		break;
 	case VMX_EXIT_REASON_EXECUTE_INVD:
 		__wbinvd();
+		break;
 	case VMX_EXIT_REASON_EXECUTE_XSETBV:
 		_xsetbv((UINT32)ExitContext->GuestContext->GuestRCX,
 			ExitContext->GuestContext->GuestRDX << 32 |
 			ExitContext->GuestContext->GuestRAX);
+		break;
 	}
+
 
 	VmxVmreadFieldToImmediate(VMCS_VMEXIT_INSTRUCTION_LENGTH, &GuestInstructionLength);
 

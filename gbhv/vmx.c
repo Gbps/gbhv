@@ -66,6 +66,7 @@ VOID VmxSetFixedBits()
     ControlRegister4.Flags |= __readmsr(IA32_VMX_CR4_FIXED0);
     ControlRegister4.Flags &= __readmsr(IA32_VMX_CR4_FIXED1);
 
+
     // Apply to the processor
     __writecr0(ControlRegister0.Flags);
     __writecr4(ControlRegister4.Flags);
