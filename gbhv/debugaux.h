@@ -1,0 +1,7 @@
+#pragma once
+
+
+
+
+#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
+#define DEBUG_PRINT_STRUCT_MEMBER(_REGISTER_, _STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %lld [0x%llX]", _REGISTER_._STRUCT_MEMBER_, _REGISTER_._STRUCT_MEMBER_)

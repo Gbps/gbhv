@@ -51,6 +51,9 @@
     <ClCompile Include="exit.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ept.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="vmm.h">
@@ -174,6 +177,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="exit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ept.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="debugaux.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

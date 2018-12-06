@@ -1,6 +1,7 @@
 #pragma once
 #include "extern.h"
 #include "vmm.h"
+#include "ept.h"
 
 /*
  * CPUID Function identifier to check if VMX is enabled.

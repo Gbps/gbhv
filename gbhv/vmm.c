@@ -12,7 +12,7 @@
  *      - Checks the Feature Control MSR to ensure that the user's BIOS has enabled VT-X
  *        (Some BIOS allows users to disable this feature)
  *      - Allocates all relevant hypervisor structures. During Windows execution, this will
- *        utilize kernel APIs to allocate some structures into the kernel pool and physical memory.
+ *        utilize kernel APIs to allocate some structures into the kernel pool and OS defined contiguous physical memory ranges.
  *      - On Windows, a DPC (Deferred Procedure Call) is queued on each processor to begin the next
  *        step of initialization, one for each logical processor for VT-X execution.
  *      - After each DPC is complete, this function returns TRUE if all processors successfully entered
@@ -21,7 +21,7 @@
 BOOL HvInitializeAllProcessors()
 {
     SIZE_T FeatureMSR;
-    PVMM_GLOBAL_CONTEXT GlobalContext;
+    PVMM_CONTEXT GlobalContext;
 
     HvUtilLog("HvInitializeAllProcessors: Starting.");
 
@@ -55,6 +55,14 @@ BOOL HvInitializeAllProcessors()
     // Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
     GlobalContext = HvAllocateVmmContext();
 
+	if (!HvEptInitialize(GlobalContext))
+	{
+		HvUtilLogError("Processor does not support all necessary EPT features.");
+		HvFreeVmmContext(GlobalContext);
+		return FALSE;
+	}
+
+
     // Generates a DPC that makes all processors execute the broadcast function.
     KeGenericCallDpc(HvpDPCBroadcastFunction, (PVOID)GlobalContext);
 
@@ -78,16 +86,18 @@ BOOL HvInitializeAllProcessors()
  * - Allocates a VMM_PROCESSOR_CONTEXT structure for each logical processor, containing
  *   information about hv operation for only that singular processor.
  */
-PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
+PVMM_CONTEXT HvAllocateVmmContext()
 {
-    PVMM_GLOBAL_CONTEXT Context;
+    PVMM_CONTEXT Context;
 
     // Allocate the global context structure
-    Context = (PVMM_GLOBAL_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
+    Context = (PVMM_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_CONTEXT));
     if (!Context)
     {
         return NULL;
     }
+
+	OsZeroMemory(Context, sizeof(VMM_CONTEXT));
 
     // Get count of all logical processors on the system
     Context->ProcessorCount = OsGetCPUCount();
@@ -133,7 +143,7 @@ PVMM_GLOBAL_CONTEXT HvAllocateVmmContext()
 /*
  * Free global VMM context and all logical processor contexts.
  */
-VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context)
+VOID HvFreeVmmContext(PVMM_CONTEXT Context)
 {
     if (Context)
     {
@@ -154,7 +164,7 @@ VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context)
 /*
  * Allocate and setup the VMXON region for the logical processor context.
  */
-PVMXON_REGION HvAllocateVmxonRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
+PVMXON_REGION HvAllocateVmxonRegion(PVMM_CONTEXT GlobalContext)
 {
     PVMXON_REGION Region;
 
@@ -187,7 +197,7 @@ PVMXON_REGION HvAllocateVmxonRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
  * 
  * Returns NULL on error.
  */
-PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext)
+PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext)
 {
     PVMM_PROCESSOR_CONTEXT Context;
 
@@ -249,7 +259,7 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT Glo
 /*
  * Allocate a VMCS memory region and write the revision identifier.
  */
-PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext)
+PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext)
 {
     PVMCS VmcsRegion;
 
@@ -282,7 +292,7 @@ VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
 /*
  * Get the current CPU context object from the global context by reading the current processor number.
  */
-PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_GLOBAL_CONTEXT GlobalContext)
+PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_CONTEXT GlobalContext)
 {
     SIZE_T CurrentProcessorNumber;
     PVMM_PROCESSOR_CONTEXT CurrentContext;
@@ -305,12 +315,12 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
                                    _In_opt_ PVOID SystemArgument2)
 {
     SIZE_T CurrentProcessorNumber;
-    PVMM_GLOBAL_CONTEXT GlobalContext;
+    PVMM_CONTEXT GlobalContext;
     PVMM_PROCESSOR_CONTEXT CurrentContext;
 
     UNREFERENCED_PARAMETER(Dpc);
 	
-    GlobalContext = (PVMM_GLOBAL_CONTEXT)DeferredContext;
+    GlobalContext = (PVMM_CONTEXT)DeferredContext;
 
     // Get the current processor number we're executing this function on right now
     CurrentProcessorNumber = OsGetCurrentProcessorNumber();
@@ -322,7 +332,7 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
     if (HvBeginInitializeLogicalProcessor(CurrentContext))
     {
         // We were successful in initializing the processor
-        GlobalContext->SuccessfulInitializationsCount++;
+		InterlockedIncrement((volatile LONG*)&GlobalContext->SuccessfulInitializationsCount);
     }
     else
     {
@@ -405,7 +415,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
  *      - The guest register context, which was pushed onto the stack during HvEnterFromGuest.
  * 
  */
-BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
+BOOL HvHandleVmExit(PVMM_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
     VMEXIT_CONTEXT ExitContext;
     PVMM_PROCESSOR_CONTEXT ProcessorContext;
@@ -463,7 +473,7 @@ BOOL HvHandleVmExit(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
  * If we're at this point, that means HvEnterFromGuest failed to enter back to the guest.
  * Print out the error informaiton and some state of the processor for debugging purposes.
  */
-BOOL HvHandleVmExitFailure(PVMM_GLOBAL_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
+BOOL HvHandleVmExitFailure(PVMM_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegisters)
 {
     PVMM_PROCESSOR_CONTEXT ProcessorContext;
 

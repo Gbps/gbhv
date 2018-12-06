@@ -249,10 +249,6 @@ typedef struct DECLSPEC_ALIGN(16) _REGISTER_CONTEXT {
 
 #pragma warning(pop)
 
-#define DEBUG_PRINT_STRUCT_NAME(_STRUCT_NAME_) HvUtilLogDebug(#_STRUCT_NAME_ ": ")
-#define DEBUG_PRINT_STRUCT_MEMBER(_STRUCT_MEMBER_) HvUtilLogDebug("    " #_STRUCT_MEMBER_ ": %i [0x%X]", Register._STRUCT_MEMBER_, Register._STRUCT_MEMBER_)
-
-
 SIZE_T ArchGetHostMSR(ULONG MsrAddress);
 
 UINT32 ArchGetCPUID(INT32 FunctionId, INT32 SubFunctionId, INT32 CPUIDRegister);

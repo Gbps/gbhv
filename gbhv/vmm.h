@@ -5,6 +5,8 @@
 #include "arch.h"
 #include "util.h"
 #include "os.h"
+#include "ept.h"
+
 /*
  * Represents a VMXON region allocated for the processor to do internal state management.
  */
@@ -24,7 +26,7 @@ typedef struct _VMXON_REGION
 } VMXON_REGION, *PVMXON_REGION;
 
 
-typedef struct _VMX_VMM_CONTEXT VMX_VMM_CONTEXT, *PVMM_GLOBAL_CONTEXT;
+typedef struct _VMX_VMM_CONTEXT VMX_VMM_CONTEXT, *PVMM_CONTEXT;
 
 typedef struct _VMM_HOST_STACK_REGION
 {
@@ -38,7 +40,7 @@ typedef struct _VMM_HOST_STACK_REGION
 	 * Top of the host stack must always have a pointer to the global context.
 	 * This allows the exit handler to access the global context after the host area is loaded.
 	 */
-	PVMM_GLOBAL_CONTEXT GlobalContext;
+	PVMM_CONTEXT GlobalContext;
 
 } VMM_HOST_STACK_REGION, *PVMM_HOST_STACK_REGION;
 
@@ -47,7 +49,7 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	/*
 	 * Pointer back to the global context structure.
 	 */
-	PVMM_GLOBAL_CONTEXT GlobalContext;
+	PVMM_CONTEXT GlobalContext;
 
 	/*
 	 * Virtual pointer to memory allocated for VMXON.
@@ -111,7 +113,10 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 * grab find the logical processor context in host operation.
 	 */
 	VMM_HOST_STACK_REGION HostStack;
+
+
 } VMX_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
+
 
 typedef struct _VMX_VMM_CONTEXT
 {
@@ -144,15 +149,26 @@ typedef struct _VMX_VMM_CONTEXT
 	 */
 	SIZE_T SystemDirectoryTableBase;
 
-} VMM_CONTEXT, *PVMM_GLOBAL_CONTEXT;
+	/*
+	 * Physical memory ranges described by the BIOS in the MTRRs.
+	 * Used to build the EPT identity mapping.
+	 */
+	MTRR_RANGE_DESCRIPTOR MemoryRanges[9];
 
-PVMCS HvAllocateVmcsRegion(PVMM_GLOBAL_CONTEXT GlobalContext);
+	/*
+	 * Number of memory ranges specified in MemoryRanges
+	 */
+	ULONG NumberOfEnabledMemoryRanges;
 
-VOID HvFreeVmmContext(PVMM_GLOBAL_CONTEXT Context);
+} VMM_CONTEXT, *PVMM_CONTEXT;
 
-PVMM_GLOBAL_CONTEXT HvAllocateVmmContext();
+PVMCS HvAllocateVmcsRegion(PVMM_CONTEXT GlobalContext);
 
-PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_GLOBAL_CONTEXT GlobalContext);
+VOID HvFreeVmmContext(PVMM_CONTEXT Context);
+
+PVMM_CONTEXT HvAllocateVmmContext();
+
+PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_CONTEXT GlobalContext);
 
 BOOL HvInitializeAllProcessors();
 
@@ -177,6 +193,6 @@ VOID HvEnterFromGuest();
 
 VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRSP, SIZE_T GuestRIP);
 
-PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_GLOBAL_CONTEXT GlobalContext);
+PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalContext);
 
 VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context);
