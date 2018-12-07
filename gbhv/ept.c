@@ -207,9 +207,10 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 		PageTable->PML3[EntryIndex].PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&PageTable->PML2[EntryIndex][0]) / PAGE_SIZE;
 	}
 
-	/* For each collection of 512 PML2 entries (512*512 total), mark it RWX using the same template above.
-	 * This marks the entries as "Present" and available.
-	 * NOTE: We can do this because the entries use the same structure as EPT_PML3_POINTER for the first 3 bits we are setting
+	/* For each collection of 512 PML2 entries (512 collections * 512 entries per collection), mark it RWX using the same template above.
+	 * This marks the entries as "Present" regardless of if the actual system has memory at this region or not. We will cause a fault in our
+	 * EPT handler if the guest access a page outside a usable range, despite the EPT frame being present here.
+	 * NOTE: We can reuse the template because the entries use the same structure as EPT_PML3_POINTER for the first 3 bits we are setting
 	 */
 	__stosq((SIZE_T*)&PageTable->PML2, RWXTemplate.Flags, VMM_EPT_PML3E_COUNT * VMM_EPT_PML2E_COUNT);
 
