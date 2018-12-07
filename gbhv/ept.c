@@ -32,7 +32,7 @@ BOOL HvEptCheckFeatures()
 /**
  * Uses the Memory Type Range Register MSRs to build a map of the physical memory on the system.
  * This will be used to build an identity mapped EPT PML4 table which directly maps physical memory
- * of the system to the system physical memory map.
+ * of the guest to the system physical memory map containing the same memory type ranges.
  */
 BOOL HvEptBuildMTRRMap(PVMM_CONTEXT GlobalContext)
 {
@@ -76,9 +76,8 @@ BOOL HvEptBuildMTRRMap(PVMM_CONTEXT GlobalContext)
 
 			if(Descriptor->MemoryType == MEMORY_TYPE_WRITE_BACK)
 			{
-				/* This is already our default, so no need to mark this range. 
-				 * Simply 'free' the ranges we just wrote.
-				 */
+				/* This is already our default, so no need to store this range. 
+				 * Simply 'free' the range we just wrote. */
 				GlobalContext->NumberOfEnabledMemoryRanges--;
 			}
 			HvUtilLogDebug("MTRR Range: Base=0x%llX End=0x%llX Type=0x%X", Descriptor->PhysicalBaseAddress, Descriptor->PhysicalEndAddress, Descriptor->MemoryType);
@@ -104,6 +103,7 @@ VOID HvEptSetupPML2Entry(PVMM_CONTEXT GlobalContext, PEPT_PML2_ENTRY NewEntry, S
 	SIZE_T AddressOfPage;
 	SIZE_T CurrentMtrrRange;
 	SIZE_T TargetMemoryType;
+
 	/*
 	 * Each of the 512 collections of 512 PML2 entries is setup here.
 	 * This will, in total, identity map every physical address from 0x0 to physical address 0x8000000000 (512GB of memory)
@@ -135,8 +135,8 @@ VOID HvEptSetupPML2Entry(PVMM_CONTEXT GlobalContext, PEPT_PML2_ENTRY NewEntry, S
 		/* If this page's address is below or equal to the max physical address of the range */
 		if(AddressOfPage <= GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalEndAddress)
 		{
-			/* And this page's address is above or equal to the base physical address of the range */
-			if( (AddressOfPage + SIZE_2_MB) >= GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalBaseAddress )
+			/* And this page's last address is above or equal to the base physical address of the range */
+			if( (AddressOfPage + SIZE_2_MB - 1) >= GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalBaseAddress )
 			{
 				/* If we're here, this page fell within one of the ranges specified by the variable MTRRs
 				 * Therefore, we must mark this page as the same cache type exposed by the MTRR 
