@@ -114,6 +114,15 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 */
 	VMM_HOST_STACK_REGION HostStack;
 
+	/**
+	 * The EPTP value to set in the VMCS in order to install EptPageTable as the currently active EPT.
+	 */
+	EPT_POINTER EptPointer;
+
+	/**
+	 * Page table entries for EPT operation.
+	 */
+	PVMM_EPT_PAGE_TABLE EptPageTable;
 
 } VMX_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
 
