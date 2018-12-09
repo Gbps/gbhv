@@ -3,7 +3,13 @@
 
 typedef struct _VMX_VMM_CONTEXT VMX_VMM_CONTEXT, *PVMM_CONTEXT;
 
-BOOL HvEptInitialize(PVMM_CONTEXT GlobalContext);
+typedef struct _VMM_PROCESSOR_CONTEXT VMM_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
+
+BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext);
+
+BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext);
+
+VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext);
 
 typedef struct _MTRR_RANGE_DESCRIPTOR
 {

@@ -89,7 +89,6 @@ BOOL HvEptBuildMTRRMap(PVMM_CONTEXT GlobalContext)
 	return TRUE;
 }
 
-int total = 0;
 
 /*
  * Creates a 2MB identity mapped PML2 entry with a cacheability type specified by system MTRRs.
@@ -142,7 +141,7 @@ VOID HvEptSetupPML2Entry(PVMM_CONTEXT GlobalContext, PEPT_PML2_ENTRY NewEntry, S
 				 * Therefore, we must mark this page as the same cache type exposed by the MTRR 
 				 */
 				TargetMemoryType = GlobalContext->MemoryRanges[CurrentMtrrRange].MemoryType;
-				HvUtilLogDebug("0x%X> Range=%llX -> %llX | Begin=%llX End=%llX", PageFrameNumber, AddressOfPage, AddressOfPage + SIZE_2_MB, GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalBaseAddress, GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalEndAddress);
+				//HvUtilLogDebug("0x%X> Range=%llX -> %llX | Begin=%llX End=%llX", PageFrameNumber, AddressOfPage, AddressOfPage + SIZE_2_MB - 1, GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalBaseAddress, GlobalContext->MemoryRanges[CurrentMtrrRange].PhysicalEndAddress);
 
 				/* 11.11.4.1 MTRR Precedences */
 				if(TargetMemoryType == MEMORY_TYPE_UNCACHEABLE)
@@ -225,38 +224,83 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 		}
 	}
 
-	HvUtilLogDebug("Total pages marked: %d", total);
 	return PageTable;
 }
 
 /**
- * Initializes EPT structures into the contexts.
+ * Initializes any EPT components that are not local to a particular processor.
+ * 
+ * Checks to ensure EPT is supported by the processor and builds a map of system memory from
+ * the MTRR registers.
  */
-BOOL HvEptInitialize(PVMM_CONTEXT GlobalContext)
+BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext)
 {
-	PVMM_EPT_PAGE_TABLE PageTable;
-
+	/* Ensure our processor supports all the EPT features we want to use */
 	if (!HvEptCheckFeatures())
 	{
 		HvUtilLogError("Processor does not support all necessary EPT features.");
 		return FALSE;
 	}
 
+	/* Build a map of the system memory as exposed by the BIOS */
 	if(!HvEptBuildMTRRMap(GlobalContext))
 	{
 		HvUtilLogError("Could not build MTRR memory map.");
 		return FALSE;
 	}
 
-	PageTable = HvEptAllocateAndCreateIdentityPageTable(GlobalContext);
-	if(PageTable == NULL)
+	return TRUE;
+}
+
+/**
+ * Initialize EPT for an individual logical processor.
+ * 
+ * Creates an identity mapped page table and sets up an EPTP to be applied to the VMCS later.
+ */
+BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
+{
+	PVMM_EPT_PAGE_TABLE PageTable;
+	EPT_POINTER EPTP;
+
+	/* Allocate the identity mapped page table*/
+	PageTable = HvEptAllocateAndCreateIdentityPageTable(ProcessorContext->GlobalContext);
+	if (PageTable == NULL)
 	{
-		HvUtilLogError("Unable to allocate memory for EPT page table!");
+		HvUtilLogError("Unable to allocate memory for EPT!");
 		return FALSE;
 	}
 
-	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG 
-	OsFreeContiguousAlignedPages(PageTable);
-	
-	return FALSE;
+	/* Virtual address to the page table to keep track of it for later freeing */
+	ProcessorContext->EptPageTable = PageTable;
+
+	EPTP.Flags = 0;
+
+	/* For performance, we let the processor know it can cache the EPT. */
+	EPTP.MemoryType = MEMORY_TYPE_WRITE_BACK;
+
+	/* We are not utilizing the 'access' and 'dirty' flag features. */
+	EPTP.EnableAccessAndDirtyFlags = FALSE;
+
+	/* We are always allocating exactly 3 levels of paging structures. */
+	/* PML4 -> PML3 -> PML2 */
+	EPTP.PageWalkLength = 3;
+
+	/* The physical page number of the page table we will be using */
+	EPTP.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(PageTable) / PAGE_SIZE;
+
+	/* We will write the EPTP to the VMCS later */
+	ProcessorContext->EptPointer.Flags = EPTP.Flags;
+
+	return TRUE;
+}
+
+/*
+ * Free memory allocated by EPT functions.
+ */
+VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
+{
+	if(ProcessorContext->EptPageTable)
+	{
+		OsFreeContiguousAlignedPages(ProcessorContext->EptPageTable);
+	}
 }

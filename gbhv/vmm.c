@@ -55,13 +55,17 @@ BOOL HvInitializeAllProcessors()
     // Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
     GlobalContext = HvAllocateVmmContext();
 
-	if (!HvEptInitialize(GlobalContext))
+	if(!GlobalContext)
+	{
+		return FALSE;
+	}
+
+	if (!HvEptGlobalInitialize(GlobalContext))
 	{
 		HvUtilLogError("Processor does not support all necessary EPT features.");
 		HvFreeVmmContext(GlobalContext);
 		return FALSE;
 	}
-
 
     // Generates a DPC that makes all processors execute the broadcast function.
     KeGenericCallDpc(HvpDPCBroadcastFunction, (PVOID)GlobalContext);
@@ -202,14 +206,14 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalCont
     PVMM_PROCESSOR_CONTEXT Context;
 
     // Allocate some generic memory for our context
-    Context = (PVMM_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMX_PROCESSOR_CONTEXT));
+    Context = (PVMM_PROCESSOR_CONTEXT)OsAllocateNonpagedMemory(sizeof(VMM_PROCESSOR_CONTEXT));
     if (!Context)
     {
         return NULL;
     }
 
     // Inititalize all fields to 0, including the stack
-    OsZeroMemory(Context, sizeof(VMX_PROCESSOR_CONTEXT));
+    OsZeroMemory(Context, sizeof(VMM_PROCESSOR_CONTEXT));
 
     // Entry to refer back to the global context for simplicity
     Context->GlobalContext = GlobalContext;
@@ -253,6 +257,15 @@ PVMM_PROCESSOR_CONTEXT HvAllocateLogicalProcessorContext(PVMM_CONTEXT GlobalCont
     // Record the physical address of the MSR bitmap
     Context->MsrBitmapPhysical = OsVirtualToPhysical(Context->MsrBitmap);
 
+	/*
+	 * Initialize EPT paging structures and the EPTP that we will apply to the VMCS.
+	 */
+	if(!HvEptLogicalProcessorInitialize(Context))
+	{
+		OsFreeContiguousAlignedPages(Context);
+		return NULL;
+	}
+
     return Context;
 }
 
@@ -285,6 +298,8 @@ VOID HvFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT Context)
     if (Context)
     {
         OsFreeContiguousAlignedPages(Context->VmxonRegion);
+		OsFreeContiguousAlignedPages(Context->MsrBitmap);
+		HvEptFreeLogicalProcessorContext(Context);
         OsFreeNonpagedMemory(Context);
     }
 }
