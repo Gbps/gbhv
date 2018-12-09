@@ -338,6 +338,12 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	 */
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_VMCS_LINK_POINTER, ~0ULL);
 
+	/*
+	 *  The extended-page-table pointer (EPTP) contains the address of the base of EPT PML4 table (see Section
+	 *  28.2.2), as well as other EPT configuration information. The format of this field is shown in Table 24-8.
+	 */
+	VmxVmwriteFieldFromRegister(VMCS_CTRL_EPT_POINTER, Context->EptPointer);
+
 	return VmError;
 }
 
@@ -435,6 +441,9 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_PROCESSOR_CONTEXT Context)
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR0_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister0);
 	VmxVmwriteFieldFromRegister(VMCS_CTRL_CR4_READ_SHADOW, Context->InitialSpecialRegisters.ControlRegister4);
 
+	/* VPID is set here. For all processors, we will use a VPID = 1. This allows the processor to separate caching
+	 * of EPT structures away from the regular OS page translation tables in the TLB.
+	 */
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_VIRTUAL_PROCESSOR_IDENTIFIER, 1);
 
 	return VmError;
@@ -555,13 +564,13 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_PROC
 	Register.Flags = 0;
 
 	/*
-	 *	TODO: Do not enable EPT quite yet.
+	 *	Enable EPT feature of the processor. This allows us to virtualize accesses to physical memory.
 	 *  
 	 *  ------------------------------------------------------------------------------------------------------------
 	 *  
 	 *  If this control is 1, extended page tables (EPT) are enabled. See Section 28.2.
 	 */
-	Register.EnableEpt = 0;
+	Register.EnableEpt = 1;
 
 	/*
 	 *  Windows 10 will attempt to use RDTSCP if it is enabled in CPUID. If it isn't enabled here, it will cause a #UD.

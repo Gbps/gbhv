@@ -161,6 +161,7 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 {
 	PVMM_EPT_PAGE_TABLE PageTable;
 	EPT_PML3_POINTER RWXTemplate;
+	EPT_PML2_ENTRY PML2EntryTemplate;
 	SIZE_T EntryGroupIndex;
 	SIZE_T EntryIndex;
 	
@@ -194,7 +195,7 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 	RWXTemplate.ExecuteAccess = 1;
 
 	/* Copy the template into each of the 512 PML3 entry slots */
-	__stosq((SIZE_T*)&PageTable->PML3, RWXTemplate.Flags, VMM_EPT_PML3E_COUNT);
+	__stosq((SIZE_T*)&PageTable->PML3[0], RWXTemplate.Flags, VMM_EPT_PML3E_COUNT);
 
 	/* For each of the 512 PML3 entries */
 	for(EntryIndex = 0; EntryIndex < VMM_EPT_PML3E_COUNT; EntryIndex++)
@@ -206,12 +207,21 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 		PageTable->PML3[EntryIndex].PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&PageTable->PML2[EntryIndex][0]) / PAGE_SIZE;
 	}
 
+	PML2EntryTemplate.Flags = 0;
+
+	/* All PML2 entries will be RWX and 'present' */
+	PML2EntryTemplate.WriteAccess = 1;
+	PML2EntryTemplate.ReadAccess = 1;
+	PML2EntryTemplate.ExecuteAccess = 1;
+
+	/* We are using 2MB large pages, so we must mark this 1 here. */
+	PML2EntryTemplate.LargePage = 1;
+
 	/* For each collection of 512 PML2 entries (512 collections * 512 entries per collection), mark it RWX using the same template above.
 	 * This marks the entries as "Present" regardless of if the actual system has memory at this region or not. We will cause a fault in our
 	 * EPT handler if the guest access a page outside a usable range, despite the EPT frame being present here.
-	 * NOTE: We can reuse the template because the entries use the same structure as EPT_PML3_POINTER for the first 3 bits we are setting
 	 */
-	__stosq((SIZE_T*)&PageTable->PML2, RWXTemplate.Flags, VMM_EPT_PML3E_COUNT * VMM_EPT_PML2E_COUNT);
+	__stosq((SIZE_T*)&PageTable->PML2[0], PML2EntryTemplate.Flags, VMM_EPT_PML3E_COUNT * VMM_EPT_PML2E_COUNT);
 
 	/* For each of the 512 collections of 512 2MB PML2 entries */
 	for(EntryGroupIndex = 0; EntryGroupIndex < VMM_EPT_PML3E_COUNT; EntryGroupIndex++)
@@ -281,12 +291,14 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We are not utilizing the 'access' and 'dirty' flag features. */
 	EPTP.EnableAccessAndDirtyFlags = FALSE;
 
-	/* We are always allocating exactly 3 levels of paging structures. */
-	/* PML4 -> PML3 -> PML2 */
+	/* 
+	 * Bits 5:3 (1 less than the EPT page-walk length) must be 3, indicating an EPT page-walk length of 4; 
+	 * see Section 28.2.2 
+	 */
 	EPTP.PageWalkLength = 3;
 
 	/* The physical page number of the page table we will be using */
-	EPTP.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(PageTable) / PAGE_SIZE;
+	EPTP.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&PageTable->PML4) / PAGE_SIZE;
 
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
