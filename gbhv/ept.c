@@ -2,6 +2,7 @@
 #include "util.h"
 #include "debugaux.h"
 #include "vmm.h"
+#include "exit.h"
 
 /**
  * Checks to ensure that the processor supports all EPT features that we want to use.
@@ -14,7 +15,7 @@ BOOL HvEptCheckFeatures()
 	VpidRegister.Flags = ArchGetHostMSR(IA32_VMX_EPT_VPID_CAP);
 	MTRRDefType.Flags = ArchGetHostMSR(IA32_MTRR_DEF_TYPE);
 
-	if (!VpidRegister.PageWalkLength4 || !VpidRegister.MemoryTypeWriteBack || !VpidRegister.Pde2MbPages)
+	if (!VpidRegister.PageWalkLength4 || !VpidRegister.MemoryTypeWriteBack || !VpidRegister.Pde2MbPages || !VpidRegister.AdvancedVmexitEptViolationsInformation)
 	{
 		return FALSE;
 	}
@@ -25,7 +26,7 @@ BOOL HvEptCheckFeatures()
 		return FALSE;
 	}
 
-	HvUtilLogDebug("All EPT features present.");
+	HvUtilLogSuccess("HvEptCheckFeatures: All EPT features present.");
 	return TRUE;
 }
 
@@ -262,6 +263,33 @@ BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext)
 	return TRUE;
 }
 
+VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set)
+{
+	UNREFERENCED_PARAMETER(ProcessorContext);
+
+	SIZE_T PhysPage = 0xDEADBEEF;
+
+	SIZE_T Offset = ADDRMASK_EPT_PML1_OFFSET(PhysPage);
+	SIZE_T Table = ADDRMASK_EPT_PML1_INDEX(PhysPage);
+	SIZE_T Directory = ADDRMASK_EPT_PML2_INDEX(PhysPage);
+	SIZE_T DirectoryPointer = ADDRMASK_EPT_PML3_INDEX(PhysPage);
+	SIZE_T PML4Entry = ADDRMASK_EPT_PML4_INDEX(PhysPage);
+
+	HvUtilLogDebug("Physical Address: 0x%llX", PhysPage);
+	HvUtilLogDebug("PML1E = 0x%llX", Offset);
+	HvUtilLogDebug("PML1 = 0x%llX", Table);
+	HvUtilLogDebug("PML2 = 0x%llX", Directory);
+	HvUtilLogDebug("PML3 = 0x%llX", DirectoryPointer);
+	HvUtilLogDebug("PML4 = 0x%llX", PML4Entry);
+
+	PEPT_PML2_ENTRY PML2 = &ProcessorContext->EptPageTable->PML2[DirectoryPointer][Directory];
+	HvUtilLogDebug("PageFrameNumber: 0x%llX", PML2->PageFrameNumber);
+	PML2->ReadAccess = set;
+	PML2->WriteAccess = set;
+	PML2->ExecuteAccess = set;
+
+}
+
 /**
  * Initialize EPT for an individual logical processor.
  * 
@@ -303,6 +331,8 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
 
+	HvEptTest(ProcessorContext, 0);
+
 	return TRUE;
 }
 
@@ -315,4 +345,43 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	{
 		OsFreeContiguousAlignedPages(ProcessorContext->EptPageTable);
 	}
+}
+
+/**
+ * Handle VM exits for EPT violations. Violations are thrown whenever an operation is performed
+ * on an EPT entry that does not provide permissions to access that page.
+ */
+VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext)
+{
+	VMX_EXIT_QUALIFICATION_EPT_VIOLATION ViolationQualification;
+
+	UNREFERENCED_PARAMETER(ProcessorContext);
+
+	ViolationQualification.Flags = ExitContext->ExitQualification;
+
+	HvUtilLogDebug("EPT Violation => 0x%llX", ExitContext->GuestPhysicalAddress);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ReadAccess);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, WriteAccess);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ExecuteAccess);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptReadable);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptWriteable);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptExecutable);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptExecutableForUserMode);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ValidGuestLinearAddress);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, CausedByTranslation);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, UserModeLinearAddress);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ReadableWritablePage);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ExecuteDisablePage);
+	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, NmiUnblocking);
+
+	ExitContext->ShouldIncrementRIP = FALSE;
+
+	HvEptTest(ProcessorContext, 1);
+
+	INVEPT_DESCRIPTOR Descriptor;
+	Descriptor.EptPointer = 0;
+	Descriptor.Reserved = 0;
+
+	__invept(2, &Descriptor);
+
 }

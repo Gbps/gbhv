@@ -1,15 +1,22 @@
 #pragma once
 #include "arch.h"
 
+
 typedef struct _VMX_VMM_CONTEXT VMX_VMM_CONTEXT, *PVMM_CONTEXT;
 
 typedef struct _VMM_PROCESSOR_CONTEXT VMM_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
+
+typedef struct _VMEXIT_CONTEXT VMEXIT_CONTEXT, *PVMEXIT_CONTEXT;
 
 BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext);
 
 BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext);
 
 VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext);
+
+VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set);
+
+VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext);
 
 typedef struct _MTRR_RANGE_DESCRIPTOR
 {
@@ -46,6 +53,31 @@ typedef struct _MTRR_RANGE_DESCRIPTOR
  * Integer 2MB
  */
 #define SIZE_2_MB ((SIZE_T)(512 * PAGE_SIZE))
+
+/**
+ * Offset into the 1st paging structure (4096 byte)
+ */
+#define ADDRMASK_EPT_PML1_OFFSET(_VAR_) (_VAR_ & 0xFFFULL)
+
+/**
+ * Index of the 1st paging structure (4096 byte)
+ */
+#define ADDRMASK_EPT_PML1_INDEX(_VAR_) ((_VAR_ & 0x1FF000ULL) >> 12)
+
+/**
+ * Index of the 2nd paging structure (2MB)
+ */
+#define ADDRMASK_EPT_PML2_INDEX(_VAR_) ((_VAR_ & 0x3FE00000ULL) >> 21)
+
+/**
+ * Index of the 3rd paging structure (1GB)
+ */
+#define ADDRMASK_EPT_PML3_INDEX(_VAR_) ((_VAR_ & 0x7FC0000000ULL) >> 30)
+
+/**
+ * Index of the 4th paging structure (512GB)
+ */
+#define ADDRMASK_EPT_PML4_INDEX(_VAR_) ((_VAR_ & 0xFF8000000000ULL) >> 39)
 
 typedef EPT_PML4 EPT_PML4_POINTER, *PEPT_PML4_POINTER;
 typedef EPDPTE EPT_PML3_POINTER, *PEPT_PML3_POINTER;

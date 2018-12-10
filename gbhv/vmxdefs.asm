@@ -50,6 +50,10 @@ PopGeneralPurposeRegisterContext MACRO
 	pop	r15
 ENDM
 
+__invept PROC
+    invept rcx, OWORD PTR [rdx]
+    ret
+__invept ENDP
 
 HvBeginInitializeLogicalProcessor PROC
 	; Save EFLAGS

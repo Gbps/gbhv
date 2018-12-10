@@ -18,7 +18,7 @@
  *      - After each DPC is complete, this function returns TRUE if all processors successfully entered
  *        VT-x mode.
  */
-BOOL HvInitializeAllProcessors()
+PVMM_CONTEXT HvInitializeAllProcessors()
 {
     SIZE_T FeatureMSR;
     PVMM_CONTEXT GlobalContext;
@@ -29,7 +29,7 @@ BOOL HvInitializeAllProcessors()
     if (!ArchIsVMXAvailable())
     {
         HvUtilLogError("VMX is not a feture of this processor.");
-        return FALSE;
+        return NULL;
     }
 
     // Enable bits in MSR to enable VMXON instruction.
@@ -39,7 +39,7 @@ BOOL HvInitializeAllProcessors()
     if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_VMX_LOCK))
     {
         HvUtilLogError("VMX support was not locked by BIOS.");
-        return FALSE;
+        return NULL;
     }
 
     // VMX support can be configured to be disabled outside SMX.
@@ -47,7 +47,7 @@ BOOL HvInitializeAllProcessors()
     if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_ALLOW_VMX_OUTSIDE_SMX))
     {
         HvUtilLogError("VMX support was disabled outside of SMX operation by BIOS.");
-        return FALSE;
+        return NULL;
     }
 
     HvUtilLog("Total Processor Count: %i", OsGetCPUCount());
@@ -57,14 +57,14 @@ BOOL HvInitializeAllProcessors()
 
 	if(!GlobalContext)
 	{
-		return FALSE;
+		return NULL;
 	}
 
 	if (!HvEptGlobalInitialize(GlobalContext))
 	{
 		HvUtilLogError("Processor does not support all necessary EPT features.");
 		HvFreeVmmContext(GlobalContext);
-		return FALSE;
+		return NULL;
 	}
 
     // Generates a DPC that makes all processors execute the broadcast function.
@@ -73,13 +73,13 @@ BOOL HvInitializeAllProcessors()
     if (GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
     {
         // TODO: Move to driver uninitalization
-        HvFreeVmmContext(GlobalContext);
         HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
-        return FALSE;
+		HvFreeVmmContext(GlobalContext);
+        return NULL;
     }
 
     HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
-    return TRUE;
+    return GlobalContext;
 }
 
 /*

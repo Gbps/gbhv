@@ -124,6 +124,8 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 */
 	PVMM_EPT_PAGE_TABLE EptPageTable;
 
+	SIZE_T DONOTTOUCH;
+
 } VMM_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
 
 
@@ -179,7 +181,7 @@ PVMM_CONTEXT HvAllocateVmmContext();
 
 PVMM_PROCESSOR_CONTEXT HvGetCurrentCPUContext(PVMM_CONTEXT GlobalContext);
 
-BOOL HvInitializeAllProcessors();
+PVMM_CONTEXT HvInitializeAllProcessors();
 
 VOID HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
 	_In_opt_ PVOID DeferredContext,
