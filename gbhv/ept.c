@@ -178,6 +178,12 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 	/* Zero out all entries to ensure all unused entries are marked Not Present */
 	OsZeroMemory(PageTable, sizeof(VMM_EPT_PAGE_TABLE));
 
+	/* Initialize the dynamic split list which holds all dynamic page splits */
+	InitializeListHead(&PageTable->DynamicSplitList);
+
+	/* Initialize the page hook list which holds information on currently hooked pages */
+	InitializeListHead(&PageTable->PageHookList);
+
 	/* Mark the first 512GB PML4 entry as present, which allows us to manage up to 512GB of discrete paging structures. */
 	PageTable->PML4[0].PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&PageTable->PML3[0]) / PAGE_SIZE;
 	PageTable->PML4[0].ReadAccess = 1;
@@ -263,6 +269,159 @@ BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext)
 	return TRUE;
 }
 
+/**
+ * Get the PML2 entry for this physical address.
+ */
+PEPT_PML2_ENTRY HvEptGetPml2Entry(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress)
+{
+	SIZE_T Directory, DirectoryPointer, PML4Entry;
+	PEPT_PML2_ENTRY PML2;
+
+	Directory  = ADDRMASK_EPT_PML2_INDEX(PhysicalAddress);
+	DirectoryPointer = ADDRMASK_EPT_PML3_INDEX(PhysicalAddress);
+	PML4Entry = ADDRMASK_EPT_PML4_INDEX(PhysicalAddress);
+
+	/* Addresses above 512GB are invalid because it is > physical address bus width */
+	if(PML4Entry > 0)
+	{
+		return NULL;
+	}
+
+	PML2 = &ProcessorContext->EptPageTable->PML2[DirectoryPointer][Directory];
+	return PML2;
+}
+
+/**
+ * Get the PML1 entry for this physical address if the page is split. Return NULL if the address is invalid
+ * or the page wasn't already split.
+ */
+PEPT_PML1_ENTRY HvEptGetPml1Entry(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress)
+{
+	SIZE_T Directory, DirectoryPointer, PML4Entry;
+	PEPT_PML2_ENTRY PML2;
+	PEPT_PML1_ENTRY PML1;
+	PEPT_PML2_POINTER PML2Pointer;
+
+	Directory = ADDRMASK_EPT_PML2_INDEX(PhysicalAddress);
+	DirectoryPointer = ADDRMASK_EPT_PML3_INDEX(PhysicalAddress);
+	PML4Entry = ADDRMASK_EPT_PML4_INDEX(PhysicalAddress);
+
+	/* Addresses above 512GB are invalid because it is > physical address bus width */
+	if (PML4Entry > 0)
+	{
+		return NULL;
+	}
+
+	PML2 = &ProcessorContext->EptPageTable->PML2[DirectoryPointer][Directory];
+
+	/* Check to ensure the page is split */
+	if(PML2->LargePage)
+	{
+		return NULL;
+	}
+
+	/* Conversion to get the right PageFrameNumber. These pointers occupy the same place in the
+	 * table and are directly convertable.
+	 */
+	PML2Pointer = (PEPT_PML2_POINTER) PML2;
+
+	/* If it is, translate to the PML1 pointer */
+	PML1 = (PEPT_PML1_ENTRY) OsPhysicalToVirtual((PPHYSVOID)(PML2Pointer->PageFrameNumber * PAGE_SIZE));
+
+	if(!PML1)
+	{
+		return NULL;
+	}
+
+	/* Index into PML1 for that address */
+	PML1 = &PML1[ADDRMASK_EPT_PML1_INDEX(PhysicalAddress)];
+
+	return PML1;
+}
+
+/**
+ * Split a large 2MB page into 512 smaller 4096 pages.
+ * 
+ * In order to set discrete EPT permissions on a singular 4096 byte page, we need to split our
+ * default 2MB entries into 512 smaller 4096 byte entries. This function will replace the default
+ * 2MB entry created for the page table at the specified PhysicalAddress and replace it with a 2MB
+ * pointer entry. That pointer will point to a dynamically allocated set of 512 smaller 4096 byte
+ * pages, which will become the new permission structures for that 2MB region.
+ */
+BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress)
+{
+	PVMM_EPT_DYNAMIC_SPLIT NewSplit;
+	EPT_PML1_ENTRY EntryTemplate;
+	SIZE_T EntryIndex;
+	PEPT_PML2_ENTRY TargetEntry;
+	EPT_PML2_POINTER NewPointer;
+
+	/* Find the PML2 entry that's currently used*/
+	TargetEntry = HvEptGetPml2Entry(ProcessorContext, PhysicalAddress);
+	if(!TargetEntry)
+	{
+		HvUtilLogError("HvEptSplitLargePage: Invalid physical address.");
+		return FALSE;
+	}
+
+	/* If this large page is not marked a large page, that means it's a pointer already.
+	 * That page is therefore already split.
+	 */
+	if(!TargetEntry->LargePage)
+	{
+		return TRUE;
+	}
+
+	/* Allocate the PML1 entries */
+	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateNonpagedMemory(sizeof(VMM_EPT_DYNAMIC_SPLIT));
+	if(!NewSplit)
+	{
+		HvUtilLogError("HvEptSplitLargePage: Failed to allocate dynamic split memory.");
+		return FALSE;
+	}
+
+	/*
+	 * Point back to the entry in the dynamic split for easy reference for which entry that
+	 * dynamic split is for.
+	 */
+	NewSplit->Entry = TargetEntry;
+
+	/* Make a template for RWX */
+	EntryTemplate.Flags = 0;
+	EntryTemplate.ReadAccess = 1;
+	EntryTemplate.WriteAccess = 1;
+	EntryTemplate.ExecuteAccess = 1;
+
+	/* Copy the template into all the PML1 entries */
+	__stosq((SIZE_T*)&NewSplit->PML1[0], EntryTemplate.Flags, VMM_EPT_PML1E_COUNT);
+
+	/**
+	 * Set the page frame numbers for identity mapping.
+	 */
+	for(EntryIndex = 0; EntryIndex < VMM_EPT_PML1E_COUNT; EntryIndex++)
+	{
+		/* Convert the 2MB page frame number to the 4096 page entry number plus the offset into the frame. */
+		NewSplit->PML1[EntryIndex].PageFrameNumber = ( (TargetEntry->PageFrameNumber * SIZE_2_MB) / PAGE_SIZE ) + EntryIndex;
+	}
+
+	/* Allocate a new pointer which will replace the 2MB entry with a pointer to 512 4096 byte entries. */
+	NewPointer.Flags = 0;
+	NewPointer.WriteAccess = 1;
+	NewPointer.ReadAccess = 1;
+	NewPointer.ExecuteAccess = 1;
+	NewPointer.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&NewSplit->PML1[0]) / PAGE_SIZE;
+
+	/* Add our allocation to the linked list of dynamic splits for later deallocation */
+	InsertHeadList(&ProcessorContext->EptPageTable->DynamicSplitList, &NewSplit->DynamicSplitList);
+
+	/**
+	 * Now, replace the entry in the page table with our new split pointer.
+	 */
+	RtlCopyMemory(TargetEntry, &NewPointer, sizeof(NewPointer));
+
+	return TRUE;
+}
+
 VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set)
 {
 	UNREFERENCED_PARAMETER(ProcessorContext);
@@ -331,7 +490,7 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
 
-	HvEptTest(ProcessorContext, 0);
+	HvEptAddPageHook(ProcessorContext, 0xDEADBEEF);
 
 	return TRUE;
 }
@@ -341,8 +500,21 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
  */
 VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 {
-	if(ProcessorContext->EptPageTable)
+	if (ProcessorContext->EptPageTable)
 	{
+		/* No races because we are above DPC IRQL */
+
+		/* Free each split */
+		FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, DynamicSplitList, VMM_EPT_DYNAMIC_SPLIT, Split)
+			OsFreeNonpagedMemory(Split);
+		}
+
+		/* Free each page hook */
+		FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
+			OsFreeNonpagedMemory(Hook);
+		}
+
+		/* Free the actual page table */
 		OsFreeContiguousAlignedPages(ProcessorContext->EptPageTable);
 	}
 }
@@ -354,6 +526,9 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext)
 {
 	VMX_EXIT_QUALIFICATION_EPT_VIOLATION ViolationQualification;
+	PVMM_EPT_PAGE_HOOK PageHook;
+
+	PageHook = NULL;
 
 	UNREFERENCED_PARAMETER(ProcessorContext);
 
@@ -374,14 +549,132 @@ VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_C
 	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ExecuteDisablePage);
 	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, NmiUnblocking);
 
+	/* 
+	 * The only kind of EPT violations we should expect are ones related to address translation.
+	 * If this is not one of those, something went terribly wrong with EPT and we need to try
+	 * to get out of VMX immediately.
+	 */
+	if (!ViolationQualification.CausedByTranslation)
+	{
+		HvUtilLogError("EPT Violation not caused by translation! Fatal error.");
+		ExitContext->ShouldStopExecution = FALSE;
+		return;
+	}
+
+	/* Resolve the hook if there is one */
+	FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
+	{
+		/* Check if our access happened inside a page we are currently hooking. */
+		if (Hook->PhysicalBaseAddress <= ExitContext->GuestPhysicalAddress
+			&& (Hook->PhysicalBaseAddress + (PAGE_SIZE - 1)) >= ExitContext->GuestPhysicalAddress)
+		{
+			PageHook = Hook;
+			break;
+		}
+	}}
+
+	/* If a violation happened outside of one of our hooked pages */
+	if (!PageHook)
+	{
+		HvUtilLogError("EPT Violation outside of a hooked section!");
+		ExitContext->ShouldStopExecution = TRUE;
+		return;
+	}
+
+	/* Otherwise, resolve the page hook */
+	*PageHook->TargetPage = PageHook->FakeEntry;
+
+	/* Redo the instruction that caused the exception. */
 	ExitContext->ShouldIncrementRIP = FALSE;
+}
 
-	HvEptTest(ProcessorContext, 1);
-
+BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress)
+{
+	PVMM_EPT_PAGE_HOOK NewHook;
+	EPT_PML1_ENTRY FakeEntry;
+	EPT_PML1_ENTRY OriginalEntry;
 	INVEPT_DESCRIPTOR Descriptor;
-	Descriptor.EptPointer = 0;
-	Descriptor.Reserved = 0;
 
-	__invept(2, &Descriptor);
+	/* Create a hook object*/
+	NewHook = (PVMM_EPT_PAGE_HOOK) OsAllocateNonpagedMemory(sizeof(VMM_EPT_PAGE_HOOK));
 
+	if (!NewHook)
+	{
+		HvUtilLogError("HvEptAddPageHook: Could not allocate memory for new hook.");
+		return FALSE;
+	}
+
+	/* 
+	 * Ensure the page is split into 512 4096 byte page entries. We can only hook a 4096 byte page, not a 2MB page.
+	 * This is due to performance hit we would get from hooking a 2MB page.
+	 */
+	if (!HvEptSplitLargePage(ProcessorContext, PhysicalAddress))
+	{
+		HvUtilLogError("HvEptAddPageHook: Could not split page for address 0x%llX.", PhysicalAddress);
+		OsFreeNonpagedMemory(NewHook);
+		return FALSE;
+	}
+
+	/* Zero our newly allocated memory */
+	OsZeroMemory(NewHook, sizeof(VMM_EPT_PAGE_HOOK));
+
+	/* Debug page */
+	__stosq((SIZE_T*) &NewHook->FakePage, 0xDEADBEEF, PAGE_SIZE / 8);
+
+	/* Base address of the 4096 page. */
+	NewHook->PhysicalBaseAddress = PhysicalAddress & ~0xFFF;
+
+	/* Pointer to the page entry in the page table. */
+	NewHook->TargetPage = HvEptGetPml1Entry(ProcessorContext, PhysicalAddress);
+
+	/* Ensure the target is valid. */
+	if (!NewHook->TargetPage)
+	{
+		HvUtilLogError("HvEptAddPageHook: Failed to get PML1 entry for target address.");
+		OsFreeNonpagedMemory(NewHook);
+		return FALSE;
+	}
+
+	/* Save the original permissions of the page */
+	NewHook->OriginalEntry = *NewHook->TargetPage;
+	OriginalEntry = *NewHook->TargetPage;
+
+	/* Setup the new fake page table entry */
+	FakeEntry.Flags = 0;
+
+	/* We want this page to raise an EPT violation so we can handle by swapping in the fake page. */
+	FakeEntry.ReadAccess = 1;
+	FakeEntry.WriteAccess = 1;
+	FakeEntry.ExecuteAccess = 1;
+
+	/* Point to our fake page we just made */
+	FakeEntry.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&NewHook->FakePage) / PAGE_SIZE;
+
+	/* Save a copy of the fake entry. */
+	NewHook->FakeEntry = FakeEntry;
+
+	/* Keep a record of the page hook */
+	InsertHeadList(&ProcessorContext->EptPageTable->PageHookList, &NewHook->PageHookList);
+
+	/* 
+	 * Lastly, mark the entry in the table as unused. This will cause the next time that it's accessed
+	 * to cause an EPT violation exit. This will allow us to swap in the fake page or the real page depending
+	 * on the type of access.
+	 */
+	OriginalEntry.ReadAccess = 0;
+	OriginalEntry.WriteAccess = 0;
+	OriginalEntry.ExecuteAccess = 0;
+	*NewHook->TargetPage = OriginalEntry;
+
+	/*
+	 * Invalidate the entry in the TLB caches so it will not conflict with the actual paging structure.
+	 */
+	if (ProcessorContext->HasLaunched)
+	{
+		Descriptor.EptPointer = ProcessorContext->EptPointer.Flags;
+		Descriptor.Reserved = 0;
+		__invept(1, &Descriptor);
+	}
+	
+	return TRUE;
 }

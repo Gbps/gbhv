@@ -47,6 +47,11 @@ typedef struct _VMM_HOST_STACK_REGION
 typedef struct _VMM_PROCESSOR_CONTEXT
 {
 	/*
+	 * Has this processor launched into VMX root mode?
+	 */
+	BOOL HasLaunched;
+
+	/*
 	 * Pointer back to the global context structure.
 	 */
 	PVMM_CONTEXT GlobalContext;
@@ -123,8 +128,6 @@ typedef struct _VMM_PROCESSOR_CONTEXT
 	 * Page table entries for EPT operation.
 	 */
 	PVMM_EPT_PAGE_TABLE EptPageTable;
-
-	SIZE_T DONOTTOUCH;
 
 } VMM_PROCESSOR_CONTEXT, *PVMM_PROCESSOR_CONTEXT;
 

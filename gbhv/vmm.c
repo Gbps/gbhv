@@ -348,6 +348,9 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
     {
         // We were successful in initializing the processor
 		InterlockedIncrement((volatile LONG*)&GlobalContext->SuccessfulInitializationsCount);
+
+		// Mark this context as launched.
+		CurrentContext->HasLaunched = TRUE;
     }
     else
     {
