@@ -15,9 +15,14 @@ BOOL HvEptCheckFeatures()
 	VpidRegister.Flags = ArchGetHostMSR(IA32_VMX_EPT_VPID_CAP);
 	MTRRDefType.Flags = ArchGetHostMSR(IA32_MTRR_DEF_TYPE);
 
-	if (!VpidRegister.PageWalkLength4 || !VpidRegister.MemoryTypeWriteBack || !VpidRegister.Pde2MbPages || !VpidRegister.AdvancedVmexitEptViolationsInformation)
+	if (!VpidRegister.PageWalkLength4 || !VpidRegister.MemoryTypeWriteBack || !VpidRegister.Pde2MbPages)
 	{
 		return FALSE;
+	}
+
+	if (!VpidRegister.AdvancedVmexitEptViolationsInformation)
+	{
+		HvUtilLogDebug("Processor does not support AdvancedVmexitEptViolationsInformation!");
 	}
 
 	if (!MTRRDefType.MtrrEnable)
