@@ -18,7 +18,7 @@ VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set);
 
 VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext);
 
-BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress);
+BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddress);
 
 typedef struct _MTRR_RANGE_DESCRIPTOR
 {
@@ -192,8 +192,17 @@ typedef struct _VMM_EPT_PAGE_HOOK
 
 	/**
 	 * The fake entry which points the page entry to FakePage in this structure. This is
-	 * then entry that will be installed when the shadow entry is not currently swapped in.
+	 * the entry that will be installed when the shadow entry is not currently swapped in.
+	 * This page is marked executable only. If this page is read or written to, the HookedEntry
+	 * will be swapped in.
 	 */
-	EPT_PML1_ENTRY FakeEntry;
+	EPT_PML1_ENTRY ShadowEntry;
+
+	/**
+	 * This entry points back to the original page of physical memory. This entry is modified
+	 * to not be executable. When this entry is swapped in and instructions are fetched from this
+	 * page, the ShadowEntry will be swapped in.
+	 */
+	EPT_PML1_ENTRY HookedEntry;
 
 } VMM_EPT_PAGE_HOOK, *PVMM_EPT_PAGE_HOOK;

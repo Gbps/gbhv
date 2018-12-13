@@ -495,7 +495,8 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
 
-	HvEptAddPageHook(ProcessorContext, 0xDEADBEEF);
+	//__debugbreak();
+	//HvEptAddPageHook(ProcessorContext, (PVOID)ZwQueryDirectoryFile );
 
 	return TRUE;
 }
@@ -512,93 +513,40 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 		/* Free each split */
 		FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, DynamicSplitList, VMM_EPT_DYNAMIC_SPLIT, Split)
 			OsFreeNonpagedMemory(Split);
-		}
+		FOR_EACH_LIST_ENTRY_END();
 
 		/* Free each page hook */
 		FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
 			OsFreeNonpagedMemory(Hook);
-		}
+		FOR_EACH_LIST_ENTRY_END();
 
 		/* Free the actual page table */
 		OsFreeContiguousAlignedPages(ProcessorContext->EptPageTable);
 	}
 }
 
-/**
- * Handle VM exits for EPT violations. Violations are thrown whenever an operation is performed
- * on an EPT entry that does not provide permissions to access that page.
- */
-VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext)
-{
-	VMX_EXIT_QUALIFICATION_EPT_VIOLATION ViolationQualification;
-	PVMM_EPT_PAGE_HOOK PageHook;
-
-	PageHook = NULL;
-
-	UNREFERENCED_PARAMETER(ProcessorContext);
-
-	ViolationQualification.Flags = ExitContext->ExitQualification;
-
-	HvUtilLogDebug("EPT Violation => 0x%llX", ExitContext->GuestPhysicalAddress);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ReadAccess);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, WriteAccess);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ExecuteAccess);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptReadable);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptWriteable);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptExecutable);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, EptExecutableForUserMode);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ValidGuestLinearAddress);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, CausedByTranslation);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, UserModeLinearAddress);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ReadableWritablePage);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, ExecuteDisablePage);
-	DEBUG_PRINT_STRUCT_MEMBER(ViolationQualification, NmiUnblocking);
-
-	/* 
-	 * The only kind of EPT violations we should expect are ones related to address translation.
-	 * If this is not one of those, something went terribly wrong with EPT and we need to try
-	 * to get out of VMX immediately.
-	 */
-	if (!ViolationQualification.CausedByTranslation)
-	{
-		HvUtilLogError("EPT Violation not caused by translation! Fatal error.");
-		ExitContext->ShouldStopExecution = FALSE;
-		return;
-	}
-
-	/* Resolve the hook if there is one */
-	FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
-	{
-		/* Check if our access happened inside a page we are currently hooking. */
-		if (Hook->PhysicalBaseAddress <= ExitContext->GuestPhysicalAddress
-			&& (Hook->PhysicalBaseAddress + (PAGE_SIZE - 1)) >= ExitContext->GuestPhysicalAddress)
-		{
-			PageHook = Hook;
-			break;
-		}
-	}}
-
-	/* If a violation happened outside of one of our hooked pages */
-	if (!PageHook)
-	{
-		HvUtilLogError("EPT Violation outside of a hooked section!");
-		ExitContext->ShouldStopExecution = TRUE;
-		return;
-	}
-
-	/* Otherwise, resolve the page hook */
-	*PageHook->TargetPage = PageHook->FakeEntry;
-
-	/* Redo the instruction that caused the exception. */
-	ExitContext->ShouldIncrementRIP = FALSE;
-}
-
-BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAddress)
+BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddress)
 {
 	PVMM_EPT_PAGE_HOOK NewHook;
 	EPT_PML1_ENTRY FakeEntry;
 	EPT_PML1_ENTRY OriginalEntry;
 	INVEPT_DESCRIPTOR Descriptor;
+	SIZE_T PhysicalAddress;
+	PVOID VirtualTarget;
+
+	/* Translate the page from a physical address to virtual so we can read its memory. 
+	 * This function will return NULL if the physical address was not already mapped in
+	 * virtual memory.
+	 */
+	VirtualTarget = PAGE_ALIGN(VirtualAddress);
+
+	PhysicalAddress = (SIZE_T) OsVirtualToPhysical(VirtualTarget);
+
+	if(!PhysicalAddress)
+	{
+		HvUtilLogError("HvEptAddPageHook: Target address could not be mapped to physical memory!");
+		return FALSE;
+	}
 
 	/* Create a hook object*/
 	NewHook = (PVMM_EPT_PAGE_HOOK) OsAllocateNonpagedMemory(sizeof(VMM_EPT_PAGE_HOOK));
@@ -623,11 +571,12 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAd
 	/* Zero our newly allocated memory */
 	OsZeroMemory(NewHook, sizeof(VMM_EPT_PAGE_HOOK));
 
-	/* Debug page */
-	__stosq((SIZE_T*) &NewHook->FakePage, 0xDEADBEEF, PAGE_SIZE / 8);
+	RtlCopyMemory(&NewHook->FakePage[0], VirtualTarget, PAGE_SIZE);
+
+	//NewHook->FakePage[ADDRMASK_EPT_PML1_OFFSET((SIZE_T)VirtualAddress)] = 0xCC;
 
 	/* Base address of the 4096 page. */
-	NewHook->PhysicalBaseAddress = PhysicalAddress & ~0xFFF;
+	NewHook->PhysicalBaseAddress = (SIZE_T) PAGE_ALIGN(PhysicalAddress);
 
 	/* Pointer to the page entry in the page table. */
 	NewHook->TargetPage = HvEptGetPml1Entry(ProcessorContext, PhysicalAddress);
@@ -647,29 +596,33 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAd
 	/* Setup the new fake page table entry */
 	FakeEntry.Flags = 0;
 
-	/* We want this page to raise an EPT violation so we can handle by swapping in the fake page. */
-	FakeEntry.ReadAccess = 1;
-	FakeEntry.WriteAccess = 1;
+	/* We want this page to raise an EPT violation on RW so we can handle by swapping in the original page. */
+	FakeEntry.ReadAccess = 0;
+	FakeEntry.WriteAccess = 0;
 	FakeEntry.ExecuteAccess = 1;
 
 	/* Point to our fake page we just made */
 	FakeEntry.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&NewHook->FakePage) / PAGE_SIZE;
 
 	/* Save a copy of the fake entry. */
-	NewHook->FakeEntry = FakeEntry;
+	NewHook->ShadowEntry.Flags = FakeEntry.Flags;
 
 	/* Keep a record of the page hook */
 	InsertHeadList(&ProcessorContext->EptPageTable->PageHookList, &NewHook->PageHookList);
 
 	/* 
-	 * Lastly, mark the entry in the table as unused. This will cause the next time that it's accessed
-	 * to cause an EPT violation exit. This will allow us to swap in the fake page or the real page depending
-	 * on the type of access.
+	 * Lastly, mark the entry in the table as no execute. This will cause the next time that an instruction is
+	 * fetched from this page to cause an EPT violation exit. This will allow us to swap in the fake page with our
+	 * hook.
 	 */
-	OriginalEntry.ReadAccess = 0;
-	OriginalEntry.WriteAccess = 0;
+	OriginalEntry.ReadAccess = 1;
+	OriginalEntry.WriteAccess = 1;
 	OriginalEntry.ExecuteAccess = 0;
-	*NewHook->TargetPage = OriginalEntry;
+
+	/* The hooked entry will be swapped in first. */
+	NewHook->HookedEntry.Flags = OriginalEntry.Flags;
+
+	NewHook->TargetPage->Flags = OriginalEntry.Flags;
 
 	/*
 	 * Invalidate the entry in the TLB caches so it will not conflict with the actual paging structure.
@@ -682,4 +635,117 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T PhysicalAd
 	}
 	
 	return TRUE;
+}
+
+/* Check if this exit is due to a violation caused by a currently hooked page. Returns FALSE
+ * if the violation was not due to a page hook.
+ * 
+ * If the memory access attempt was RW and the page was marked executable, the page is swapped with
+ * the original page.
+ * 
+ * If the memory access attempt was execute and the page was marked not executable, the page is swapped with
+ * the hooked page.
+ */
+BOOL HvExitHandlePageHookExit(
+	PVMM_PROCESSOR_CONTEXT ProcessorContext,
+	PVMEXIT_CONTEXT ExitContext,
+	VMX_EXIT_QUALIFICATION_EPT_VIOLATION ViolationQualification)
+{
+	PVMM_EPT_PAGE_HOOK PageHook;
+
+	PageHook = NULL;
+
+	/*
+	 * The only kind of EPT violations we should expect are ones related to address translation.
+	 * If this is not one of those, something went terribly wrong with EPT and we need to try
+	 * to get out of VMX immediately.
+	 */
+	if (!ViolationQualification.CausedByTranslation)
+	{
+		return FALSE;
+	}
+
+	/* Resolve the hook if there is one */
+	FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
+	{
+		/* Check if our access happened inside a page we are currently hooking. */
+		if ( Hook->PhysicalBaseAddress == (SIZE_T)PAGE_ALIGN(ExitContext->GuestPhysicalAddress) )
+		{
+			PageHook = Hook;
+			break;
+		}
+	}
+	FOR_EACH_LIST_ENTRY_END();
+
+
+	/* If a violation happened outside of one of our hooked pages we don't
+	 * want to try to handle it.
+	 */
+	if (!PageHook)
+	{
+		return FALSE;
+	}
+
+	/* If the violation was due to trying to execute a non-executable page, that means that the currently
+	 * swapped in page is our original RW page. We need to swap in the hooked executable page (fake page)
+	 */
+
+	if(!ViolationQualification.EptExecutable && ViolationQualification.ExecuteAccess)
+	{
+		/* Swap out the non-executable page and swap in the executable page */
+		PageHook->TargetPage->Flags = PageHook->ShadowEntry.Flags;
+
+		/* Redo the instruction */
+		ExitContext->ShouldIncrementRIP = FALSE;
+
+		HvUtilLogSuccess("Made Exec");
+
+		return TRUE;
+	}
+
+	/* If the current page is executable but the memory access was a R or W operation, we want to
+	 * swap back in the original page.
+	 */
+	if(ViolationQualification.EptExecutable 
+		&& (ViolationQualification.ReadAccess | ViolationQualification.WriteAccess) )
+	{
+		/* Otherwise, the executable page is swapped */
+		PageHook->TargetPage->Flags = PageHook->HookedEntry.Flags;
+
+		/* Redo the instruction */
+		ExitContext->ShouldIncrementRIP = FALSE;
+
+		HvUtilLogSuccess("Made RW");
+
+		return TRUE;
+	}
+
+	HvUtilLogError("Hooked page had invalid page swapping logic?!");
+
+	return FALSE;
+}
+/**
+ * Handle VM exits for EPT violations. Violations are thrown whenever an operation is performed
+ * on an EPT entry that does not provide permissions to access that page.
+ */
+VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext)
+{
+	VMX_EXIT_QUALIFICATION_EPT_VIOLATION ViolationQualification;
+
+	UNREFERENCED_PARAMETER(ProcessorContext);
+
+	ViolationQualification.Flags = ExitContext->ExitQualification;
+
+	HvUtilLogDebug("EPT Violation => 0x%llX", ExitContext->GuestPhysicalAddress);
+
+	if(HvExitHandlePageHookExit(ProcessorContext, ExitContext, ViolationQualification))
+	{
+		// Handled by page hook code.
+		return;
+	}
+
+	HvUtilLogError("Unexpected EPT violation!");
+
+	/* Redo the instruction that caused the exception. */
+	ExitContext->ShouldStopExecution = TRUE;
 }

@@ -496,7 +496,12 @@ BOOL HvHandleVmExitFailure(PVMM_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
     PVMM_PROCESSOR_CONTEXT ProcessorContext;
 
     UNREFERENCED_PARAMETER(GuestRegisters);
+	UNREFERENCED_PARAMETER(GlobalContext);
+	UNREFERENCED_PARAMETER(ProcessorContext);
 
+	// TODO: Fix GlobalContext
+	KeBugCheck(0xDEADBEEF);
+	/*
     // Grab our logical processor context object for this processor
     ProcessorContext = HvGetCurrentCPUContext(GlobalContext);
 
@@ -515,4 +520,5 @@ BOOL HvHandleVmExitFailure(PVMM_CONTEXT GlobalContext, PGPREGISTER_CONTEXT Guest
 
     // Continue execution with VMX disabled.
     return TRUE;
+	*/
 }

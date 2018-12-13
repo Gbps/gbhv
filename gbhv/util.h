@@ -39,4 +39,10 @@ VOID HvUtilLogError(LPCSTR MessageFormat, ...);
 #define FOR_EACH_LIST_ENTRY(_LISTHEAD_, _LISTHEAD_NAME_, _TARGET_TYPE_, _TARGET_NAME_) \
 	for (PLIST_ENTRY Entry = _LISTHEAD_->_LISTHEAD_NAME_.Flink; Entry != &_LISTHEAD_->_LISTHEAD_NAME_; Entry = Entry->Flink) { \
 	P##_TARGET_TYPE_ _TARGET_NAME_ = CONTAINING_RECORD(Entry, _TARGET_TYPE_, _LISTHEAD_NAME_);
-	
+
+/**
+ * The braces for the block are messy due to the need to define a local variable in the for loop scope.
+ * Therefore, this macro just ends the for each block without messing up code editors trying to detect
+ * the block indent level.
+ */
+# define FOR_EACH_LIST_ENTRY_END() }

@@ -90,10 +90,11 @@ VOID HvExitHandleUnknownExit(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CO
 {
 	UNREFERENCED_PARAMETER(ProcessorContext);
 
+	__debugbreak();
 	HvUtilLogError("Unknown exit reason! An exit was made but no handler was configured to handle it. Reason: 0x%llX", ExitContext->ExitReason.BasicExitReason);
 
 	// Try to keep executing, despite the unknown exit.
-	ExitContext->ShouldIncrementRIP = FALSE;
+	ExitContext->ShouldIncrementRIP = TRUE;
 	
 }
 
