@@ -14,11 +14,9 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext);
 
 VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext);
 
-VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set);
-
 VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CONTEXT ExitContext);
 
-BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddress);
+BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction);
 
 typedef struct _MTRR_RANGE_DESCRIPTOR
 {
@@ -205,4 +203,8 @@ typedef struct _VMM_EPT_PAGE_HOOK
 	 */
 	EPT_PML1_ENTRY HookedEntry;
 
+	/**
+	 * The buffer of the trampoline function which is used in the inline hook.
+	 */
+	PCHAR Trampoline;
 } VMM_EPT_PAGE_HOOK, *PVMM_EPT_PAGE_HOOK;

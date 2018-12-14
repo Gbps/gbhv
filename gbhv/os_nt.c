@@ -74,6 +74,26 @@ PVOID OsAllocateNonpagedMemory(SIZE_T NumberOfBytes)
 }
 
 /*
+ * Allocate generic, nonpaged, executable r/w memory.
+ *
+ * Returns NULL if the bytes could not be allocated.
+ */
+PVOID OsAllocateExecutableNonpagedMemory(SIZE_T NumberOfBytes)
+{
+	PVOID Output;
+
+	Output = ExAllocatePoolWithTag(NonPagedPool, NumberOfBytes, HV_POOL_TAG);
+
+	if (Output == NULL)
+	{
+		HvUtilLogError("OsAllocateExecutableNonpagedMemory: Out of memory!");
+	}
+
+	return Output;
+}
+
+
+/*
  * Free memory allocated with OsAllocateNonpagedMemory.
  */
 VOID OsFreeNonpagedMemory(PVOID MemoryPointer)

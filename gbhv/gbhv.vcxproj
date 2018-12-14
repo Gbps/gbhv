@@ -136,6 +136,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Link>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+      <AdditionalDependencies>$(ProjectDir)lib\LDE64x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
       <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -145,6 +146,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Link>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+      <AdditionalDependencies>$(ProjectDir)lib\LDE64x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
       <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -173,6 +175,7 @@
     <ClInclude Include="ept.h" />
     <ClInclude Include="exit.h" />
     <ClInclude Include="extern.h" />
+    <ClInclude Include="lde64.h" />
     <ClInclude Include="msr.h" />
     <ClInclude Include="os.h" />
     <ClInclude Include="phnt\ntdbg.h" />

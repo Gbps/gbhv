@@ -20,6 +20,9 @@
     <Filter Include="Header Files\phnt">
       <UniqueIdentifier>{82b19245-825f-474e-ae7a-444caa77cc69}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\lib">
+      <UniqueIdentifier>{96505862-5ccf-4327-8f98-770779b6c409}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Inf Include="gbhv.inf">
@@ -184,6 +187,9 @@
     </ClInclude>
     <ClInclude Include="debugaux.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lde64.h">
+      <Filter>Header Files\lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

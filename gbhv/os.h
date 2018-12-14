@@ -13,6 +13,8 @@ VOID OsFreeContiguousAlignedPages(PVOID PageRegionAddress);
 
 PVOID OsAllocateNonpagedMemory(SIZE_T NumberOfBytes);
 
+PVOID OsAllocateExecutableNonpagedMemory(SIZE_T NumberOfBytes);
+
 VOID OsFreeNonpagedMemory(PVOID MemoryPointer);
 
 PPHYSVOID OsVirtualToPhysical(PVOID VirtualAddress);

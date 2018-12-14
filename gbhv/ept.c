@@ -3,6 +3,7 @@
 #include "debugaux.h"
 #include "vmm.h"
 #include "exit.h"
+#include "lde64.h"
 
 /**
  * Checks to ensure that the processor supports all EPT features that we want to use.
@@ -427,32 +428,73 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	return TRUE;
 }
 
-VOID HvEptTest(PVMM_PROCESSOR_CONTEXT ProcessorContext, int set)
+NTSTATUS (*NtCreateFileOrig)(
+	PHANDLE            FileHandle,
+	ACCESS_MASK        DesiredAccess,
+	POBJECT_ATTRIBUTES ObjectAttributes,
+	PIO_STATUS_BLOCK   IoStatusBlock,
+	PLARGE_INTEGER     AllocationSize,
+	ULONG              FileAttributes,
+	ULONG              ShareAccess,
+	ULONG              CreateDisposition,
+	ULONG              CreateOptions,
+	PVOID              EaBuffer,
+	ULONG              EaLength
+	);
+
+NTSTATUS NtCreateFileHook(
+	PHANDLE            FileHandle,
+	ACCESS_MASK        DesiredAccess,
+	POBJECT_ATTRIBUTES ObjectAttributes,
+	PIO_STATUS_BLOCK   IoStatusBlock,
+	PLARGE_INTEGER     AllocationSize,
+	ULONG              FileAttributes,
+	ULONG              ShareAccess,
+	ULONG              CreateDisposition,
+	ULONG              CreateOptions,
+	PVOID              EaBuffer,
+	ULONG              EaLength
+)
 {
-	UNREFERENCED_PARAMETER(ProcessorContext);
+	HANDLE kFileHandle;
+	UNICODE_STRING kObjectName;
+	kObjectName.Buffer = NULL;
 
-	SIZE_T PhysPage = 0xDEADBEEF;
+	__try
+	{
 
-	SIZE_T Offset = ADDRMASK_EPT_PML1_OFFSET(PhysPage);
-	SIZE_T Table = ADDRMASK_EPT_PML1_INDEX(PhysPage);
-	SIZE_T Directory = ADDRMASK_EPT_PML2_INDEX(PhysPage);
-	SIZE_T DirectoryPointer = ADDRMASK_EPT_PML3_INDEX(PhysPage);
-	SIZE_T PML4Entry = ADDRMASK_EPT_PML4_INDEX(PhysPage);
+		ProbeForRead(FileHandle, sizeof(HANDLE), 1);
+		ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), 1);
+		ProbeForRead(ObjectAttributes->ObjectName, sizeof(UNICODE_STRING), 1);
+		ProbeForRead(ObjectAttributes->ObjectName->Buffer, ObjectAttributes->ObjectName->Length, 1);
 
-	HvUtilLogDebug("Physical Address: 0x%llX", PhysPage);
-	HvUtilLogDebug("PML1E = 0x%llX", Offset);
-	HvUtilLogDebug("PML1 = 0x%llX", Table);
-	HvUtilLogDebug("PML2 = 0x%llX", Directory);
-	HvUtilLogDebug("PML3 = 0x%llX", DirectoryPointer);
-	HvUtilLogDebug("PML4 = 0x%llX", PML4Entry);
+		kFileHandle = *FileHandle;
+		kObjectName.Length = ObjectAttributes->ObjectName->Length;
+		kObjectName.MaximumLength = ObjectAttributes->ObjectName->MaximumLength;
+		kObjectName.Buffer = ExAllocatePoolWithTag(NonPagedPool, kObjectName.MaximumLength, 0xA);
+		RtlCopyUnicodeString(&kObjectName, ObjectAttributes->ObjectName);
 
-	PEPT_PML2_ENTRY PML2 = &ProcessorContext->EptPageTable->PML2[DirectoryPointer][Directory];
-	HvUtilLogDebug("PageFrameNumber: 0x%llX", PML2->PageFrameNumber);
-	PML2->ReadAccess = set;
-	PML2->WriteAccess = set;
-	PML2->ExecuteAccess = set;
+		if(wcsstr(kObjectName.Buffer, L"test.txt"))
+		{
+			HvUtilLogSuccess("Blocked access to test.txt");
+			return STATUS_ACCESS_DENIED;
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
 
+	}
+
+	if (kObjectName.Buffer)
+	{
+		ExFreePoolWithTag(kObjectName.Buffer, 0xA);
+	}
+
+
+	return NtCreateFileOrig(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize, FileAttributes,
+		ShareAccess, CreateDisposition, CreateOptions, EaBuffer, EaLength);
 }
+
 
 /**
  * Initialize EPT for an individual logical processor.
@@ -495,8 +537,7 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
 
-	//__debugbreak();
-	//HvEptAddPageHook(ProcessorContext, (PVOID)ZwQueryDirectoryFile );
+	HvEptAddPageHook(ProcessorContext, (PVOID)NtCreateFile, (PVOID)NtCreateFileHook, (PVOID*)&NtCreateFileOrig);
 
 	return TRUE;
 }
@@ -517,6 +558,7 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 
 		/* Free each page hook */
 		FOR_EACH_LIST_ENTRY(ProcessorContext->EptPageTable, PageHookList, VMM_EPT_PAGE_HOOK, Hook)
+			OsFreeNonpagedMemory(Hook->Trampoline);
 			OsFreeNonpagedMemory(Hook);
 		FOR_EACH_LIST_ENTRY_END();
 
@@ -525,7 +567,80 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	}
 }
 
-BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddress)
+/* Write an absolute x64 jump to an arbitrary address to a buffer. */
+VOID HvEptHookWriteAbsoluteJump(PCHAR TargetBuffer, SIZE_T TargetAddress)
+{
+	/* mov r15, Target */
+	TargetBuffer[0] = 0x49;
+	TargetBuffer[1] = 0xBB;
+
+	/* Target */
+	*((PSIZE_T)&TargetBuffer[2]) = TargetAddress;
+
+	/* push r15 */
+	TargetBuffer[10] = 0x41;
+	TargetBuffer[11] = 0x53;
+
+	/* ret */
+	TargetBuffer[12] = 0xC3;
+}
+
+
+BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction)
+{
+	SIZE_T SizeOfHookedInstructions;
+	SIZE_T OffsetIntoPage;
+
+	OffsetIntoPage = ADDRMASK_EPT_PML1_OFFSET((SIZE_T)TargetFunction);
+	HvUtilLogDebug("OffsetIntoPage: 0x%llx", OffsetIntoPage);
+
+	if ((OffsetIntoPage + 13) > PAGE_SIZE-1)
+	{
+		HvUtilLogError("Function extends past a page boundary. We just don't have the technology to solve this.....");
+		return FALSE;
+	}
+
+	/* Determine the number of instructions necessary to overwrite using Length Disassembler Engine */
+	for(SizeOfHookedInstructions = 0; 
+		SizeOfHookedInstructions < 13; 
+		SizeOfHookedInstructions += LDE(TargetFunction, 64))
+	{
+		// Get the full size of instructions necessary to copy
+	}
+
+	HvUtilLogDebug("Number of bytes of instruction mem: %d", SizeOfHookedInstructions);
+
+	/* Build a trampoline */
+	
+	/* Allocate some executable memory for the trampoline */
+	Hook->Trampoline = OsAllocateExecutableNonpagedMemory(SizeOfHookedInstructions + 13);
+
+	if (!Hook->Trampoline)
+	{
+		HvUtilLogError("Could not allocate trampoline function buffer.");
+		return FALSE;
+	}
+
+	/* Copy the trampoline instructions in. */
+	RtlCopyMemory(Hook->Trampoline, TargetFunction, SizeOfHookedInstructions);
+
+	/* Add the absolute jump back to the original function. */
+	HvEptHookWriteAbsoluteJump(&Hook->Trampoline[SizeOfHookedInstructions], (SIZE_T)TargetFunction + SizeOfHookedInstructions);
+
+	HvUtilLogDebug("Trampoline: 0x%llx", Hook->Trampoline);
+	HvUtilLogDebug("HookFunction: 0x%llx", HookFunction);
+
+	/* Let the hook function call the original function */
+	*OrigFunction = Hook->Trampoline;
+
+	/* Write the absolute jump to our shadow page memory to jump to our hook. */
+	HvEptHookWriteAbsoluteJump(&Hook->FakePage[OffsetIntoPage], (SIZE_T)HookFunction);
+
+	return TRUE;
+}
+
+
+BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction)
 {
 	PVMM_EPT_PAGE_HOOK NewHook;
 	EPT_PML1_ENTRY FakeEntry;
@@ -538,7 +653,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddr
 	 * This function will return NULL if the physical address was not already mapped in
 	 * virtual memory.
 	 */
-	VirtualTarget = PAGE_ALIGN(VirtualAddress);
+	VirtualTarget = PAGE_ALIGN(TargetFunction);
 
 	PhysicalAddress = (SIZE_T) OsVirtualToPhysical(VirtualTarget);
 
@@ -572,8 +687,6 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddr
 	OsZeroMemory(NewHook, sizeof(VMM_EPT_PAGE_HOOK));
 
 	RtlCopyMemory(&NewHook->FakePage[0], VirtualTarget, PAGE_SIZE);
-
-	//NewHook->FakePage[ADDRMASK_EPT_PML1_OFFSET((SIZE_T)VirtualAddress)] = 0xCC;
 
 	/* Base address of the 4096 page. */
 	NewHook->PhysicalBaseAddress = (SIZE_T) PAGE_ALIGN(PhysicalAddress);
@@ -622,6 +735,14 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID VirtualAddr
 	/* The hooked entry will be swapped in first. */
 	NewHook->HookedEntry.Flags = OriginalEntry.Flags;
 
+	if(!HvEptHookInstructionMemory(NewHook, TargetFunction, HookFunction, OrigFunction))
+	{
+		HvUtilLogError("HvEptAddPageHook: Could not build hook.");
+		OsFreeNonpagedMemory(NewHook);
+		return FALSE;
+	}
+
+	/* Apply the hook to EPT */
 	NewHook->TargetPage->Flags = OriginalEntry.Flags;
 
 	/*
