@@ -477,6 +477,7 @@ NTSTATUS NtCreateFileHook(
 		if(wcsstr(kObjectName.Buffer, L"test.txt"))
 		{
 			HvUtilLogSuccess("Blocked access to test.txt");
+			ExFreePoolWithTag(kObjectName.Buffer, 0xA);
 			return STATUS_ACCESS_DENIED;
 		}
 	}
