@@ -1,6 +1,12 @@
-# Gbhv - Simple x64 'Blue-pill' Hypervisor
+# Gbhv - Simple x64 Hypervisor Framework
 
-**Gbhv** is a **simple, powerful 64-bit Windows-based VT-x Hypervisor proof of concept** written as an exercise to learn the internals of **Intel's VT-x** virtualization technology and how it can be used to interface with operating systems at an extremely low level. This project is based on the original **Blue-Pill Type-2** hypervisor technique which subverts a running bare-metal OS, turning it into a virtualized system at the mercy of the hypervisor. When running above another operating system, a hypervisor is able to fully compromise the integrity of the system by intercepting any privileged operations and memory accesses the OS performs. For example, **Windows** will attempt to verify the integrity of the system against tampering from rootkits using a built-in protection called **PatchGuard**. To show the power of hardware assisted hypervisor technology, **Gbhv** takes advantage of the features of **VT-x** to stealthily hide code modifications from **PatchGuard**. With this technique, **Gbhv** can hook or modify any function or data of the running operating system without ever triggering security or integrity protections, making it an incredibly powerful tool in security research of operating systems.
+**Gbhv** is a **simple, powerful 64-bit Windows-based VT-x Hypervisor proof of concept** written as an exercise to learn the internals of **Intel's VT-X** virtualization technology and how it can be used to interface with operating systems at an extremely low level. This project is based on the original **Blue-Pill** hypervisor technique which subverts a running bare-metal OS, turning it into a virtualized system at the mercy of the hypervisor. When running above another operating system, a hypervisor is able to fully compromise the integrity of the system by intercepting any privileged operations and memory accesses the OS performs. For example, **Windows** will attempt to verify the integrity of the system against tampering from rootkits using a built-in protection called **PatchGuard**. To show the power of hardware assisted hypervisor technology, **Gbhv** takes advantage of the features of **VT-X** to stealthily hide code modifications from **PatchGuard**. With this technique, **Gbhv** can hook or modify any function or data of the running operating system without ever triggering security or integrity protections, making it an incredibly powerful tool in security research of operating systems.
+
+## Example
+
+![testtxt_stop](img/testtxt_stop.PNG)
+
+**Gbhv** comes bundled with a precompiled driver ready to see in action. This driver provides a simple example of hooking the **NtCreateFile** API using **EPT Shadow Hooking** to block all usermode APIs which act on files that contain the substring 'test.txt'. The above image is an example of trying to create a file named test.txt, and the hypervisor intercepting and denying the process access.
 
 ## Introduction to Intel VT-X/VMX
 
@@ -55,19 +61,13 @@ One of the central goals of **Gbhv** is to be clean and organized. Each source f
 
 ## Utilized Libraries
 
-There are three open-source libraries used by **Gbhv**.
+There are a few open-source libraries used by **Gbhv**.
 
 **[ia32-doc](	https://github.com/wbenny/ia32-doc)** - Awesome project which pulls constants and structure information from the Intel manual into a usable C format. The result is that **Gbhv** removes a huge amount of bit-flipping typically required to interact with the processor. In addition, all constants and structures used are automatically documented and link directly to the manual which describes them.
 
 **[phnt](https://github.com/processhacker/processhacker/tree/master/phnt)** - The **ProcessHacker** **NT Library**, a set of NT API header files maintained for interfacing with the Windows Kernel. This project significantly reduces the usage of the official **Windows Driver Development Kit**, which has been known to be very inconsistent between versions and lacks features which Microsoft deems 'unsupported' but are still very useful to us.
 
 **[LDE64](https://github.com/BeaEngine/lde64)** - A very lightweight length disassembler for x86-64 which is used by the EPT hooking code to build inline code hooks into shadow memory.
-
-## Example
-
-![testtxt_stop](img/testtxt_stop.PNG)
-
-**Gbhv** comes bundled with a precompiled driver ready to see in action. This driver provides a simple example of hooking the **NtCreateFile** API using **EPT Shadow Hooking** to block all file APIs which act on files that contain the substring 'test.txt'. Above is an example of trying to create a file named test.txt, and the hypervisor intercepting and denying the process access.
 
 ## References
 
@@ -87,8 +87,9 @@ The hypervisor development community has been growing significantly in the last 
 
 ## Greetz
 
-Greetz to [daax](https://revers.engineering/), drew1ind, and [zbe](https://dro.github.io/) for the all the help and motivation to start and finish this project.
+Greetz to [daax](https://revers.engineering/), [drew1ind](https://howtohypervise.blogspot.com/), and [zbe](https://dro.github.io/) for the all the help and motivation to start and finish this project.
 
 Shoutout to everyone from the [Reverse Engineering Discord](https://discordapp.com/invite/weKN5wb).
 
-This project was originally developed as a semester-long project sponsored by Carnegie Mellon University.
+This project was originally developed as a semester-long project sponsored by [Carnegie Mellon University](https://www.cmu.edu/ini/).
+
