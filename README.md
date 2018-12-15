@@ -91,3 +91,4 @@ Greetz to [daax](https://revers.engineering/), drew1ind, and [zbe](https://dro.g
 
 Shoutout to everyone from the [Reverse Engineering Discord](https://discordapp.com/invite/weKN5wb).
 
+This project was originally developed as a semester-long project sponsored by Carnegie Mellon University.
