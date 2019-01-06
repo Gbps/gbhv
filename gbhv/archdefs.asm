@@ -36,7 +36,7 @@ ArchCaptureContext PROC
 	mov [rcx+0A0h], rbp
 	mov [rcx+0A8h], rsi
 	mov [rcx+0B0h], rdi
-	mov [rcx+0D8h], r14
+	mov [rcx+0D8h], r12
 	mov [rcx+0E0h], r13
 	mov [rcx+0E8h], r14
 	mov [rcx+0F0h], r15
