@@ -91,7 +91,7 @@ The hypervisor development community has been growing significantly in the last 
 
 ## Greetz
 
-Greetz to [daax](https://revers.engineering/), [drew1ind](https://howtohypervise.blogspot.com/), and [zbe](https://dro.github.io/) for the all the help and motivation to start and finish this project.
+Greetz to [daax](https://revers.engineering/), [drew](https://howtohypervise.blogspot.com/), and [zbe](https://dro.github.io/) for the all the help and motivation to start and finish this project.
 
 Shoutout to everyone from the [Reverse Engineering Discord](https://discordapp.com/invite/weKN5wb).
 
