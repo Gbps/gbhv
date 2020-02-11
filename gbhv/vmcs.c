@@ -149,18 +149,18 @@ VMX_ERROR HvSetupVmcsHostArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SI
 	 * Copy required architecture MSRs to the guest.
 	 * 
 	 * The following MSRs:
-	 *	ó IA32_SYSENTER_CS (32 bits)
-	 *	ó IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits; 32 bits on processors that do not support Intel 64
+	 *	‚Äî IA32_SYSENTER_CS (32 bits)
+	 *	‚Äî IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits; 32 bits on processors that do not support Intel 64
 	 *	architecture).
-	 *	ó IA32_PERF_GLOBAL_CTRL (64 bits). This field is supported only on processors that support the 1-setting of
-	 *	the ìload IA32_PERF_GLOBAL_CTRLî VM-exit control.
-	 *	ó IA32_PAT (64 bits). This field is supported only on processors that support the 1-setting of the ìload
-	 *	IA32_PATî VM-exit control.
-	 *	ó IA32_EFER (64 bits). This field is supported only on processors that support the 1-setting of the ìload
-	 *	IA32_EFERî VM-exit control.
+	 *	‚Äî IA32_PERF_GLOBAL_CTRL (64 bits). This field is supported only on processors that support the 1-setting of
+	 *	the ‚Äúload IA32_PERF_GLOBAL_CTRL‚Äù VM-exit control.
+	 *	‚Äî IA32_PAT (64 bits). This field is supported only on processors that support the 1-setting of the ‚Äúload
+	 *	IA32_PAT‚Äù VM-exit control.
+	 *	‚Äî IA32_EFER (64 bits). This field is supported only on processors that support the 1-setting of the ‚Äúload
+	 *	IA32_EFER‚Äù VM-exit control.
 	 */
 
-	VmxVmwriteFieldFromRegister(VMCS_SYSENTER_CS, SpecialRegisters->SysenterCsMsr);
+	VmxVmwriteFieldFromRegister(VMCS_HOST_SYSENTER_CS, SpecialRegisters->SysenterCsMsr);
 	VmxVmwriteFieldFromImmediate(VMCS_HOST_SYSENTER_ESP, SpecialRegisters->SysenterEspMsr);
 	VmxVmwriteFieldFromImmediate(VMCS_HOST_SYSENTER_EIP, SpecialRegisters->SysenterEipMsr);
 
@@ -180,12 +180,12 @@ VMX_ERROR HvSetupVmcsGuestSegment(SEGMENT_DESCRIPTOR_REGISTER_64 GdtRegister, SE
 
 	/*
 	 * The following fields for each of the registers CS, SS, DS, ES, FS, GS, LDTR, and TR:
-	 *  ó Selector (16 bits).
-	 *  ó Base address (64 bits; 32 bits on processors that do not support Intel 64 architecture). The base-address
+	 *  ‚Äî Selector (16 bits).
+	 *  ‚Äî Base address (64 bits; 32 bits on processors that do not support Intel 64 architecture). The base-address
 	 *    fields for CS, SS, DS, and ES have only 32 architecturally-defined bits; nevertheless, the corresponding
 	 *    VMCS fields have 64 bits on processors that support Intel 64 architecture.
-	 *  ó Segment limit (32 bits). The limit field is always a measure in bytes.
-	 *  ó Access rights (32 bits). The format of this field is given in Table 24-2 and detailed as follows
+	 *  ‚Äî Segment limit (32 bits). The limit field is always a measure in bytes.
+	 *  ‚Äî Access rights (32 bits). The format of this field is given in Table 24-2 and detailed as follows
 	 */
 	VmxVmwriteFieldFromImmediate(VmcsSelector, SegmentDescriptor.Selector);
 	VmxVmwriteFieldFromImmediate(VmcsBase, SegmentDescriptor.BaseAddress);
@@ -310,7 +310,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	 */
 
 	/*
-	 * Activity state (32 bits). This field identifies the logical processorís activity state. When a logical processor is
+	 * Activity state (32 bits). This field identifies the logical processor‚Äôs activity state. When a logical processor is
 	 * executing instructions normally, it is in the active state. Execution of certain instructions and the occurrence
 	 * of certain events may cause a logical processor to transition to an inactive state in which it ceases to execute
 	 * instructions.
@@ -332,7 +332,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 	VmxVmwriteFieldFromImmediate(VMCS_GUEST_PENDING_DEBUG_EXCEPTIONS, 0);
 
 	/*
-	 *  If the ìVMCS shadowingî VM-execution control is 1, the VMREAD and VMWRITE
+	 *  If the ‚ÄúVMCS shadowing‚Äù VM-execution control is 1, the VMREAD and VMWRITE
 	 *  instructions access the VMCS referenced by this pointer (see Section 24.10). Otherwise, software should set
 	 *  this field to FFFFFFFF_FFFFFFFFH to avoid VM-entry failures (see Section 26.3.1.5).
 	 */
@@ -364,7 +364,7 @@ VMX_ERROR HvSetupVmcsControlFields(PVMM_PROCESSOR_CONTEXT Context)
 	 *
 	 * The exception bitmap is a 32-bit field that contains one bit for each exception. When an exception occurs, its
 	 * vector is used to select a bit in this field. If the bit is 1, the exception causes a VM exit. If the bit is 0, the exception
-	 * is delivered normally through the IDT, using the descriptor corresponding to the exceptionís vector
+	 * is delivered normally through the IDT, using the descriptor corresponding to the exception‚Äôs vector
 	 */
 	VmxVmwriteFieldFromImmediate(VMCS_CTRL_EXCEPTION_BITMAP, 0);
 
@@ -520,7 +520,7 @@ IA32_VMX_PROCBASED_CTLS_REGISTER HvSetupVmcsControlProcessor(PVMM_PROCESSOR_CONT
 	 * 
 	 * This control determines whether MSR bitmaps are used to control execution of the RDMSR
 	 * and WRMSR instructions (see Section 24.6.9 and Section 25.1.3).
-	 * For this control, ì0î means ìdo not use MSR bitmapsî and ì1î means ìuse MSR bitmaps.î If the
+	 * For this control, ‚Äú0‚Äù means ‚Äúdo not use MSR bitmaps‚Äù and ‚Äú1‚Äù means ‚Äúuse MSR bitmaps.‚Äù If the
 	 * MSR bitmaps are not used, all executions of the RDMSR and WRMSR instructions cause
 	 * VM exits.
 	 */
