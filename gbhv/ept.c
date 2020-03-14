@@ -397,6 +397,9 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	EntryTemplate.ReadAccess = 1;
 	EntryTemplate.WriteAccess = 1;
 	EntryTemplate.ExecuteAccess = 1;
+	EntryTemplate.MemoryType = TargetEntry->MemoryType;
+	EntryTemplate.IgnorePat = TargetEntry->IgnorePat;
+	EntryTemplate.SuppressVe = TargetEntry->SuppressVe;
 
 	/* Copy the template into all the PML1 entries */
 	__stosq((SIZE_T*)&NewSplit->PML1[0], EntryTemplate.Flags, VMM_EPT_PML1E_COUNT);
