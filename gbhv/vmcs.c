@@ -594,6 +594,16 @@ IA32_VMX_PROCBASED_CTLS2_REGISTER HvSetupVmcsControlSecondaryProcessor(PVMM_PROC
 	Register.EnableVpid = 1;
 
 	/*
+	 *  Windows 10 will attempt to use INVCPID if it is enabled in CPUID. If it isn't enabled here, it will cause a #UD.
+	 *  That's bad, and will definitely crash the system.
+	 *
+	 *  ------------------------------------------------------------------------------------------------------------
+	 *
+	 *  If this control is 0, any execution of INVCPID causes a #UD.
+	 */
+	Register.EnableInvpcid = 1;
+
+	/*
 	 *  Windows 10 will attempt to use XSAVE/XRESTORE if it is enabled in CPUID. If it isn't enabled here, it will cause a #UD.
 	 *  That's bad, and will definitely crash the system.
 	 *
