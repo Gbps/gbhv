@@ -8,7 +8,7 @@
  */
 BOOL VmxLaunchProcessor(PVMM_PROCESSOR_CONTEXT Context)
 {
-    HvUtilLogDebug("VmxLaunchProcessor: VMLAUNCH....");
+    HvUtilLogDebug("VmxLaunchProcessor: VMLAUNCH....\n");
 
     // Launch the VMCS! If this returns, there was an error.
     // Otherwise, execution continues in guest_resumes_here from vmxdefs.asm
@@ -37,11 +37,11 @@ VOID VmxPrintErrorState(PVMM_PROCESSOR_CONTEXT Context)
     // Read the failure code
     if (__vmx_vmread(VMCS_VM_INSTRUCTION_ERROR, &FailureCode) != 0)
     {
-        HvUtilLogError("VmxPrintErrorState: Failed to read error code.");
+        HvUtilLogError("VmxPrintErrorState: Failed to read error code.\n");
         return;
     }
 
-    HvUtilLogError("VmxPrintErrorState: VMLAUNCH Error = 0x%llx", FailureCode);
+    HvUtilLogError("VmxPrintErrorState: VMLAUNCH Error = 0x%llx\n", FailureCode);
 }
 
 /*
@@ -90,27 +90,27 @@ BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
     // Ensure the required fixed bits are set in cr0 and cr4, as per the spec.
     VmxSetFixedBits();
 
-    HvUtilLogDebug("VmxOnRegion[#%i]: (V) 0x%llx / (P) 0x%llx [%i]", OsGetCurrentProcessorNumber(), Context->VmxonRegion, Context->VmxonRegionPhysical, (PUINT32)Context->VmxonRegion->VmcsRevisionNumber);
+    HvUtilLogDebug("VmxOnRegion[#%i]: (V) 0x%llx / (P) 0x%llx [%i]\n", OsGetCurrentProcessorNumber(), Context->VmxonRegion, Context->VmxonRegionPhysical, (PUINT32)Context->VmxonRegion->VmcsRevisionNumber);
 
     // Execute VMXON to bring processor to VMX mode
     // Check RFLAGS.CF == 0 to ensure successful execution
     if (__vmx_on((ULONGLONG *)&Context->VmxonRegionPhysical) != 0)
     {
-        HvUtilLogError("VMXON failed.");
+        HvUtilLogError("VMXON failed.\n");
         return FALSE;
     }
 
     // And clear the VMCS before writing the configuration entries to it
     if (__vmx_vmclear((ULONGLONG *)&Context->VmcsRegionPhysical) != 0)
     {
-        HvUtilLogError("VMCLEAR failed.");
+        HvUtilLogError("VMCLEAR failed.\n");
         return FALSE;
     }
 
     // Now load the blank VMCS
     if (__vmx_vmptrld((ULONGLONG *)&Context->VmcsRegionPhysical) != 0)
     {
-        HvUtilLogError("VMPTRLD failed.");
+        HvUtilLogError("VMPTRLD failed.\n");
         return FALSE;
     }
 
@@ -127,12 +127,12 @@ BOOL VmxEnterRootMode(PVMM_PROCESSOR_CONTEXT Context)
  */
 BOOL VmxExitRootMode(PVMM_PROCESSOR_CONTEXT Context)
 {
-	HvUtilLogError("Exiting VMX.");
+	HvUtilLogError("Exiting VMX.\n");
 
     // Clear the VMCS before VMXOFF (Specification requires this)
     if (__vmx_vmclear((ULONGLONG *)&Context->VmcsRegionPhysical) != 0)
     {
-        HvUtilLogError("VMCLEAR failed.");
+        HvUtilLogError("VMCLEAR failed.\n");
     }
 
     // Turn off VMX

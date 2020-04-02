@@ -40,7 +40,7 @@ PVOID OsAllocateContiguousAlignedPages(SIZE_T NumberOfPages)
 
 	if(Output == NULL)
 	{
-		HvUtilLogError("OsAllocateContiguousAlignedPages: Out of memory!");
+		HvUtilLogError("OsAllocateContiguousAlignedPages: Out of memory!\n");
 	}
 
 	return Output;
@@ -67,7 +67,7 @@ PVOID OsAllocateNonpagedMemory(SIZE_T NumberOfBytes)
 
 	if (Output == NULL)
 	{
-		HvUtilLogError("OsAllocateNonpagedMemory: Out of memory!");
+		HvUtilLogError("OsAllocateNonpagedMemory: Out of memory!\n");
 	}
 
 	return Output;
@@ -86,7 +86,7 @@ PVOID OsAllocateExecutableNonpagedMemory(SIZE_T NumberOfBytes)
 
 	if (Output == NULL)
 	{
-		HvUtilLogError("OsAllocateExecutableNonpagedMemory: Out of memory!");
+		HvUtilLogError("OsAllocateExecutableNonpagedMemory: Out of memory!\n");
 	}
 
 	return Output;
