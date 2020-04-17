@@ -15,7 +15,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	
 	DriverObject->DriverUnload = DriverUnload;
 
-	HvUtilLog("--------------------------------------------------------------");
+	HvUtilLog("--------------------------------------------------------------\n");
 
 	GlobalContext = HvInitializeAllProcessors();
 
@@ -53,11 +53,11 @@ VOID NTAPI ExitRootModeOnAllProcessors(_In_ struct _KDPC *Dpc,
 	// Initialize processor for VMX
 	if (VmxExitRootMode(CurrentContext))
 	{
-		HvUtilLogDebug("ExitRootModeOnAllProcessors[#%i]: Exiting VMX mode.", CurrentProcessorNumber);
+		HvUtilLogDebug("ExitRootModeOnAllProcessors[#%i]: Exiting VMX mode.\n", CurrentProcessorNumber);
 	}
 	else
 	{
-		HvUtilLogError("ExitRootModeOnAllProcessors[#%i]: Failed to exit VMX mode.", CurrentProcessorNumber);
+		HvUtilLogError("ExitRootModeOnAllProcessors[#%i]: Failed to exit VMX mode.\n", CurrentProcessorNumber);
 	}
 
 	// These must be called for GenericDpcCall to signal other processors

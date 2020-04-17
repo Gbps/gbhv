@@ -23,12 +23,12 @@ PVMM_CONTEXT HvInitializeAllProcessors()
     SIZE_T FeatureMSR;
     PVMM_CONTEXT GlobalContext;
 
-    HvUtilLog("HvInitializeAllProcessors: Starting.");
+    HvUtilLog("HvInitializeAllProcessors: Starting.\n");
 
     // Check if VMX support is enabled on the processor.
     if (!ArchIsVMXAvailable())
     {
-        HvUtilLogError("VMX is not a feture of this processor.");
+        HvUtilLogError("VMX is not a feture of this processor.\n");
         return NULL;
     }
 
@@ -38,7 +38,7 @@ PVMM_CONTEXT HvInitializeAllProcessors()
     // The BIOS will lock the VMX bit on startup.
     if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_VMX_LOCK))
     {
-        HvUtilLogError("VMX support was not locked by BIOS.");
+        HvUtilLogError("VMX support was not locked by BIOS.\n");
         return NULL;
     }
 
@@ -46,11 +46,11 @@ PVMM_CONTEXT HvInitializeAllProcessors()
     // Check to ensure this isn't the case.
     if (!HvUtilBitIsSet(FeatureMSR, FEATURE_BIT_ALLOW_VMX_OUTSIDE_SMX))
     {
-        HvUtilLogError("VMX support was disabled outside of SMX operation by BIOS.");
+        HvUtilLogError("VMX support was disabled outside of SMX operation by BIOS.\n");
         return NULL;
     }
 
-    HvUtilLog("Total Processor Count: %i", OsGetCPUCount());
+    HvUtilLog("Total Processor Count: %i\n", OsGetCPUCount());
 
     // Pre-allocate all logical processor contexts, VMXON regions, VMCS regions
     GlobalContext = HvAllocateVmmContext();
@@ -62,7 +62,7 @@ PVMM_CONTEXT HvInitializeAllProcessors()
 
 	if (!HvEptGlobalInitialize(GlobalContext))
 	{
-		HvUtilLogError("Processor does not support all necessary EPT features.");
+		HvUtilLogError("Processor does not support all necessary EPT features.\n");
 		HvFreeVmmContext(GlobalContext);
 		return NULL;
 	}
@@ -73,12 +73,12 @@ PVMM_CONTEXT HvInitializeAllProcessors()
     if (GlobalContext->SuccessfulInitializationsCount != OsGetCPUCount())
     {
         // TODO: Move to driver uninitalization
-        HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]", GlobalContext->SuccessfulInitializationsCount);
+        HvUtilLogError("HvInitializeAllProcessors: Not all processors initialized. [%i successful]\n", GlobalContext->SuccessfulInitializationsCount);
 		HvFreeVmmContext(GlobalContext);
         return NULL;
     }
 
-    HvUtilLogSuccess("HvInitializeAllProcessors: Success.");
+    HvUtilLogSuccess("HvInitializeAllProcessors: Success.\n");
     return GlobalContext;
 }
 
@@ -131,15 +131,15 @@ PVMM_CONTEXT HvAllocateVmmContext()
         ProcessorContexts[ProcessorNumber] = HvAllocateLogicalProcessorContext(Context);
         if (ProcessorContexts[ProcessorNumber] == NULL)
         {
-            HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to setup processor context.", ProcessorNumber);
+            HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to setup processor context.\n", ProcessorNumber);
             return NULL;
         }
 
-        HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx]", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
+        HvUtilLog("HvInitializeLogicalProcessor[#%i]: Allocated Context [Context = 0x%llx]\n", ProcessorNumber, ProcessorContexts[ProcessorNumber]);
     }
 
     Context->AllProcessorContexts = ProcessorContexts;
-    HvUtilLog("VmcsRevisionNumber: %x", Context->VmxCapabilities.VmcsRevisionId);
+    HvUtilLog("VmcsRevisionNumber: %x\n", Context->VmxCapabilities.VmcsRevisionId);
 
     return Context;
 }
@@ -354,7 +354,7 @@ VOID NTAPI HvpDPCBroadcastFunction(_In_ struct _KDPC *Dpc,
     }
     else
     {
-        HvUtilLogError("HvpDPCBroadcastFunction[#%i]: Failed to VMLAUNCH.", CurrentProcessorNumber);
+        HvUtilLogError("HvpDPCBroadcastFunction[#%i]: Failed to VMLAUNCH.\n", CurrentProcessorNumber);
     }
 
     // These must be called for GenericDpcCall to signal other processors
@@ -384,7 +384,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
     // Enable VMXe, execute VMXON and enter VMX root mode
     if (!VmxEnterRootMode(Context))
     {
-        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.\n", CurrentProcessorNumber);
         return;
     }
 
@@ -392,7 +392,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
     // &Context->HostStack.GlobalContext is also the top of the host stack
     if (!HvSetupVmcsDefaults(Context, (SIZE_T)&HvEnterFromGuest, (SIZE_T)&Context->HostStack.GlobalContext, GuestRIP, GuestRSP))
     {
-        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.", CurrentProcessorNumber);
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to enter VMX Root Mode.\n", CurrentProcessorNumber);
         VmxExitRootMode(Context);
         return;
     }
@@ -401,7 +401,7 @@ VOID HvInitializeLogicalProcessor(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRS
     // on the guest.
     if (!VmxLaunchProcessor(Context))
     {
-        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.", CurrentProcessorNumber);
+        HvUtilLogError("HvInitializeLogicalProcessor[#%i]: Failed to VmxLaunchProcessor.\n", CurrentProcessorNumber);
         return;
     }
 }
@@ -473,7 +473,7 @@ BOOL HvHandleVmExit(PVMM_CONTEXT GlobalContext, PGPREGISTER_CONTEXT GuestRegiste
     if(!Success)
     {
 		// TODO: More information
-		HvUtilLogError("Failed to handle exit.");
+		HvUtilLogError("Failed to handle exit.\n");
     }
 
     /*

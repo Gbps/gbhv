@@ -78,7 +78,7 @@ VOID HvExitHandleEptMisconfiguration(PVMM_PROCESSOR_CONTEXT ProcessorContext, PV
 {
 	UNREFERENCED_PARAMETER(ProcessorContext);
 
-	HvUtilLogError("EPT Misconfiguration! A field in the EPT paging structure was invalid. Faulting guest address: 0x%llX", ExitContext->GuestPhysicalAddress);
+	HvUtilLogError("EPT Misconfiguration! A field in the EPT paging structure was invalid. Faulting guest address: 0x%llX\n", ExitContext->GuestPhysicalAddress);
 
 	ExitContext->ShouldIncrementRIP = FALSE;
 	ExitContext->ShouldStopExecution = TRUE;
@@ -91,7 +91,7 @@ VOID HvExitHandleUnknownExit(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CO
 	UNREFERENCED_PARAMETER(ProcessorContext);
 
 	__debugbreak();
-	HvUtilLogError("Unknown exit reason! An exit was made but no handler was configured to handle it. Reason: 0x%llX", ExitContext->ExitReason.BasicExitReason);
+	HvUtilLogError("Unknown exit reason! An exit was made but no handler was configured to handle it. Reason: 0x%llX\n", ExitContext->ExitReason.BasicExitReason);
 
 	// Try to keep executing, despite the unknown exit.
 	ExitContext->ShouldIncrementRIP = TRUE;
@@ -144,7 +144,7 @@ BOOL HvExitDispatchFunction(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_CON
 
 	if (ExitContext->ShouldStopExecution)
 	{
-		HvUtilLogError("HvExitDispatchFunction: Leaving VMX mode.");
+		HvUtilLogError("HvExitDispatchFunction: Leaving VMX mode.\n");
 		return FALSE;
 	}
 

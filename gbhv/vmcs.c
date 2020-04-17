@@ -25,11 +25,11 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T 
 
 	// Setup all of the control fields of the VMCS
 	VmError |= HvSetupVmcsControlFields(Context);
-	HvUtilLogDebug("HvSetupVmcsControlFields: VmError = %i", VmError);
+	HvUtilLogDebug("HvSetupVmcsControlFields: VmError = %i\n", VmError);
 
 	if(VmError != 0)
 	{
-		HvUtilLogError("HvSetupVmcsControlFields: VmError = %i", VmError);
+		HvUtilLogError("HvSetupVmcsControlFields: VmError = %i\n", VmError);
 		return FALSE;
 	}
 		
@@ -38,7 +38,7 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T 
 
 	if (VmError != 0)
 	{
-		HvUtilLogError("HvSetupVmcsGuestArea: VmError = %i", VmError);
+		HvUtilLogError("HvSetupVmcsGuestArea: VmError = %i\n", VmError);
 		return FALSE;
 	}
 
@@ -47,7 +47,7 @@ BOOL HvSetupVmcsDefaults(PVMM_PROCESSOR_CONTEXT Context, SIZE_T HostRIP, SIZE_T 
 
 	if (VmError != 0)
 	{
-		HvUtilLogError("HvSetupVmcsHostArea: VmError = %i", VmError);
+		HvUtilLogError("HvSetupVmcsHostArea: VmError = %i\n", VmError);
 		return FALSE;
 	}
 
@@ -262,7 +262,7 @@ VMX_ERROR HvSetupVmcsGuestArea(PVMM_PROCESSOR_CONTEXT Context, SIZE_T GuestRIP, 
 
 	// TODO: Totally refactor segmentation setup
 
-	HvUtilLogDebug("GdtRegister: 0x%llx, Base: 0x%llx, Limit: 0x%llx", GdtRegister, GdtRegister.BaseAddress, GdtRegister.Limit);
+	HvUtilLogDebug("GdtRegister: 0x%llx, Base: 0x%llx, Limit: 0x%llx\n", GdtRegister, GdtRegister.BaseAddress, GdtRegister.Limit);
 
 	VMCS_SETUP_GUEST_SEGMENTATION(ES, Registers->SegES);
 	VMCS_SETUP_GUEST_SEGMENTATION(CS, Registers->SegCS);

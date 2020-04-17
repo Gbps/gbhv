@@ -23,16 +23,16 @@ BOOL HvEptCheckFeatures()
 
 	if (!VpidRegister.AdvancedVmexitEptViolationsInformation)
 	{
-		HvUtilLogDebug("Processor does not support AdvancedVmexitEptViolationsInformation!");
+		HvUtilLogDebug("Processor does not support AdvancedVmexitEptViolationsInformation!\n");
 	}
 
 	if (!MTRRDefType.MtrrEnable)
 	{
-		HvUtilLogError("MTRR Dynamic Ranges not supported");
+		HvUtilLogError("MTRR Dynamic Ranges not supported.\n");
 		return FALSE;
 	}
 
-	HvUtilLogSuccess("HvEptCheckFeatures: All EPT features present.");
+	HvUtilLogSuccess("HvEptCheckFeatures: All EPT features present.\n");
 	return TRUE;
 }
 
@@ -53,7 +53,7 @@ BOOL HvEptBuildMTRRMap(PVMM_CONTEXT GlobalContext)
 
 	MTRRCap.Flags = ArchGetHostMSR(IA32_MTRR_CAPABILITIES);
 
-	HvUtilLogDebug("EPT: Number of dynamic ranges: %d", MTRRCap.VariableRangeCount);
+	HvUtilLogDebug("EPT: Number of dynamic ranges: %d\n", MTRRCap.VariableRangeCount);
 
 	for(CurrentRegister = 0; CurrentRegister < MTRRCap.VariableRangeCount; CurrentRegister++)
 	{
@@ -87,11 +87,11 @@ BOOL HvEptBuildMTRRMap(PVMM_CONTEXT GlobalContext)
 				 * Simply 'free' the range we just wrote. */
 				GlobalContext->NumberOfEnabledMemoryRanges--;
 			}
-			HvUtilLogDebug("MTRR Range: Base=0x%llX End=0x%llX Type=0x%X", Descriptor->PhysicalBaseAddress, Descriptor->PhysicalEndAddress, Descriptor->MemoryType);
+			HvUtilLogDebug("MTRR Range: Base=0x%llX End=0x%llX Type=0x%X\n", Descriptor->PhysicalBaseAddress, Descriptor->PhysicalEndAddress, Descriptor->MemoryType);
 		}
 	}
 
-	HvUtilLogDebug("Total MTRR Ranges Committed: %d", GlobalContext->NumberOfEnabledMemoryRanges);
+	HvUtilLogDebug("Total MTRR Ranges Committed: %d\n", GlobalContext->NumberOfEnabledMemoryRanges);
 
 	return TRUE;
 }
@@ -177,7 +177,7 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 
 	if(PageTable == NULL)
 	{
-		HvUtilLogError("HvEptCreatePageTable: Failed to allocate memory for PageTable.");
+		HvUtilLogError("HvEptCreatePageTable: Failed to allocate memory for PageTable.\n");
 		return NULL;
 	}
 
@@ -261,14 +261,14 @@ BOOL HvEptGlobalInitialize(PVMM_CONTEXT GlobalContext)
 	/* Ensure our processor supports all the EPT features we want to use */
 	if (!HvEptCheckFeatures())
 	{
-		HvUtilLogError("Processor does not support all necessary EPT features.");
+		HvUtilLogError("Processor does not support all necessary EPT features.\n");
 		return FALSE;
 	}
 
 	/* Build a map of the system memory as exposed by the BIOS */
 	if(!HvEptBuildMTRRMap(GlobalContext))
 	{
-		HvUtilLogError("Could not build MTRR memory map.");
+		HvUtilLogError("Could not build MTRR memory map.\n");
 		return FALSE;
 	}
 
@@ -366,7 +366,7 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	TargetEntry = HvEptGetPml2Entry(ProcessorContext, PhysicalAddress);
 	if(!TargetEntry)
 	{
-		HvUtilLogError("HvEptSplitLargePage: Invalid physical address.");
+		HvUtilLogError("HvEptSplitLargePage: Invalid physical address.\n");
 		return FALSE;
 	}
 
@@ -382,7 +382,7 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateNonpagedMemory(sizeof(VMM_EPT_DYNAMIC_SPLIT));
 	if(!NewSplit)
 	{
-		HvUtilLogError("HvEptSplitLargePage: Failed to allocate dynamic split memory.");
+		HvUtilLogError("HvEptSplitLargePage: Failed to allocate dynamic split memory.\n");
 		return FALSE;
 	}
 
@@ -459,41 +459,38 @@ NTSTATUS NtCreateFileHook(
 	ULONG              EaLength
 )
 {
-	HANDLE kFileHandle;
-	UNICODE_STRING kObjectName;
-	kObjectName.Buffer = NULL;
+	static WCHAR BlockedFileName[] = L"test.txt";
+	static SIZE_T BlockedFileNameLength = (sizeof(BlockedFileName) / sizeof(BlockedFileName[0])) - 1;
+
+	PWCH NameBuffer;
+	USHORT NameLength;
 
 	__try
 	{
 
-		ProbeForRead(FileHandle, sizeof(HANDLE), 1);
 		ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), 1);
 		ProbeForRead(ObjectAttributes->ObjectName, sizeof(UNICODE_STRING), 1);
-		ProbeForRead(ObjectAttributes->ObjectName->Buffer, ObjectAttributes->ObjectName->Length, 1);
 
-		kFileHandle = *FileHandle;
-		kObjectName.Length = ObjectAttributes->ObjectName->Length;
-		kObjectName.MaximumLength = ObjectAttributes->ObjectName->MaximumLength;
-		kObjectName.Buffer = ExAllocatePoolWithTag(NonPagedPool, kObjectName.MaximumLength, 0xA);
-		RtlCopyUnicodeString(&kObjectName, ObjectAttributes->ObjectName);
+		NameBuffer = ObjectAttributes->ObjectName->Buffer;
+		NameLength = ObjectAttributes->ObjectName->Length;
 
-		if(wcsstr(kObjectName.Buffer, L"test.txt"))
+		ProbeForRead(NameBuffer, NameLength, 1);
+
+		/* Convert to length in WCHARs */
+		NameLength /= sizeof(WCHAR);
+
+		/* Does the file path (ignoring case and null terminator) end with our blocked file name? */
+		if (NameLength >= BlockedFileNameLength && 
+			_wcsnicmp(&NameBuffer[NameLength - BlockedFileNameLength], BlockedFileName, BlockedFileNameLength) == 0)
 		{
-			HvUtilLogSuccess("Blocked access to test.txt");
-			ExFreePoolWithTag(kObjectName.Buffer, 0xA);
+			HvUtilLogSuccess("Blocked access to %ws\n", BlockedFileName);
 			return STATUS_ACCESS_DENIED;
 		}
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
-
+		NOTHING;
 	}
-
-	if (kObjectName.Buffer)
-	{
-		ExFreePoolWithTag(kObjectName.Buffer, 0xA);
-	}
-
 
 	return NtCreateFileOrig(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize, FileAttributes,
 		ShareAccess, CreateDisposition, CreateOptions, EaBuffer, EaLength);
@@ -514,7 +511,7 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	PageTable = HvEptAllocateAndCreateIdentityPageTable(ProcessorContext->GlobalContext);
 	if (PageTable == NULL)
 	{
-		HvUtilLogError("Unable to allocate memory for EPT!");
+		HvUtilLogError("Unable to allocate memory for EPT!\n");
 		return FALSE;
 	}
 
@@ -596,11 +593,11 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	SIZE_T OffsetIntoPage;
 
 	OffsetIntoPage = ADDRMASK_EPT_PML1_OFFSET((SIZE_T)TargetFunction);
-	HvUtilLogDebug("OffsetIntoPage: 0x%llx", OffsetIntoPage);
+	HvUtilLogDebug("OffsetIntoPage: 0x%llx\n", OffsetIntoPage);
 
 	if ((OffsetIntoPage + 13) > PAGE_SIZE-1)
 	{
-		HvUtilLogError("Function extends past a page boundary. We just don't have the technology to solve this.....");
+		HvUtilLogError("Function extends past a page boundary. We just don't have the technology to solve this.....\n");
 		return FALSE;
 	}
 
@@ -612,7 +609,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 		// Get the full size of instructions necessary to copy
 	}
 
-	HvUtilLogDebug("Number of bytes of instruction mem: %d", SizeOfHookedInstructions);
+	HvUtilLogDebug("Number of bytes of instruction mem: %d\n", SizeOfHookedInstructions);
 
 	/* Build a trampoline */
 	
@@ -621,7 +618,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 
 	if (!Hook->Trampoline)
 	{
-		HvUtilLogError("Could not allocate trampoline function buffer.");
+		HvUtilLogError("Could not allocate trampoline function buffer.\n");
 		return FALSE;
 	}
 
@@ -631,8 +628,8 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	/* Add the absolute jump back to the original function. */
 	HvEptHookWriteAbsoluteJump(&Hook->Trampoline[SizeOfHookedInstructions], (SIZE_T)TargetFunction + SizeOfHookedInstructions);
 
-	HvUtilLogDebug("Trampoline: 0x%llx", Hook->Trampoline);
-	HvUtilLogDebug("HookFunction: 0x%llx", HookFunction);
+	HvUtilLogDebug("Trampoline: 0x%llx\n", Hook->Trampoline);
+	HvUtilLogDebug("HookFunction: 0x%llx\n", HookFunction);
 
 	/* Let the hook function call the original function */
 	*OrigFunction = Hook->Trampoline;
@@ -663,7 +660,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunct
 
 	if(!PhysicalAddress)
 	{
-		HvUtilLogError("HvEptAddPageHook: Target address could not be mapped to physical memory!");
+		HvUtilLogError("HvEptAddPageHook: Target address could not be mapped to physical memory!\n");
 		return FALSE;
 	}
 
@@ -672,7 +669,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunct
 
 	if (!NewHook)
 	{
-		HvUtilLogError("HvEptAddPageHook: Could not allocate memory for new hook.");
+		HvUtilLogError("HvEptAddPageHook: Could not allocate memory for new hook.\n");
 		return FALSE;
 	}
 
@@ -682,7 +679,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunct
 	 */
 	if (!HvEptSplitLargePage(ProcessorContext, PhysicalAddress))
 	{
-		HvUtilLogError("HvEptAddPageHook: Could not split page for address 0x%llX.", PhysicalAddress);
+		HvUtilLogError("HvEptAddPageHook: Could not split page for address 0x%llX.\n", PhysicalAddress);
 		OsFreeNonpagedMemory(NewHook);
 		return FALSE;
 	}
@@ -701,7 +698,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunct
 	/* Ensure the target is valid. */
 	if (!NewHook->TargetPage)
 	{
-		HvUtilLogError("HvEptAddPageHook: Failed to get PML1 entry for target address.");
+		HvUtilLogError("HvEptAddPageHook: Failed to get PML1 entry for target address.\n");
 		OsFreeNonpagedMemory(NewHook);
 		return FALSE;
 	}
@@ -741,7 +738,7 @@ BOOL HvEptAddPageHook(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVOID TargetFunct
 
 	if(!HvEptHookInstructionMemory(NewHook, TargetFunction, HookFunction, OrigFunction))
 	{
-		HvUtilLogError("HvEptAddPageHook: Could not build hook.");
+		HvUtilLogError("HvEptAddPageHook: Could not build hook.\n");
 		OsFreeNonpagedMemory(NewHook);
 		return FALSE;
 	}
@@ -823,7 +820,7 @@ BOOL HvExitHandlePageHookExit(
 		/* Redo the instruction */
 		ExitContext->ShouldIncrementRIP = FALSE;
 
-		HvUtilLogSuccess("Made Exec");
+		HvUtilLogSuccess("Made Exec\n");
 
 		return TRUE;
 	}
@@ -840,12 +837,12 @@ BOOL HvExitHandlePageHookExit(
 		/* Redo the instruction */
 		ExitContext->ShouldIncrementRIP = FALSE;
 
-		HvUtilLogSuccess("Made RW");
+		HvUtilLogSuccess("Made RW\n");
 
 		return TRUE;
 	}
 
-	HvUtilLogError("Hooked page had invalid page swapping logic?!");
+	HvUtilLogError("Hooked page had invalid page swapping logic?!\n");
 
 	return FALSE;
 }
@@ -861,7 +858,7 @@ VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_C
 
 	ViolationQualification.Flags = ExitContext->ExitQualification;
 
-	HvUtilLogDebug("EPT Violation => 0x%llX", ExitContext->GuestPhysicalAddress);
+	HvUtilLogDebug("EPT Violation => 0x%llX\n", ExitContext->GuestPhysicalAddress);
 
 	if(HvExitHandlePageHookExit(ProcessorContext, ExitContext, ViolationQualification))
 	{
@@ -869,7 +866,7 @@ VOID HvExitHandleEptViolation(PVMM_PROCESSOR_CONTEXT ProcessorContext, PVMEXIT_C
 		return;
 	}
 
-	HvUtilLogError("Unexpected EPT violation!");
+	HvUtilLogError("Unexpected EPT violation!\n");
 
 	/* Redo the instruction that caused the exception. */
 	ExitContext->ShouldStopExecution = TRUE;
