@@ -9,6 +9,7 @@ ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
 Provider=%ManufacturerName%
 DriverVer=
 CatalogFile=gbhv.cat
+PnpLockdown=1
 
 [DestinationDirs]
 DefaultDestDir = 12
@@ -20,10 +21,7 @@ DefaultDestDir = 12
 [SourceDisksFiles]
 
 
-[Manufacturer]
-%ManufacturerName%=Standard,NT$ARCH$
-
-[Standard.NT$ARCH$]
+[DefaultInstall.NTamd64]
 
 
 [Strings]
