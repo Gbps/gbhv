@@ -389,7 +389,7 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	* functions to fail, because the Mm APIs are not able to properly translate physical addresses within a large page
 	* back to its virtual address due to a null PTE pointer inside the PFN database entry for the large page.
 	* 
-	* From my testing, I was unable to find a way to cooerce Mm to split a nonpaged pool large page for me, so the best
+	* From my testing, I was unable to find a way to coerce Mm to split a nonpaged pool large page for me, so the best
 	* alternative was to use the contiguous aligned pages allocator because, in my testing, it resulted in only 4KB virtual
 	* allocations. This allocator also utilizes nonpaged pool frames, so it is more-or-less the same as the other allocator.
 	*/
