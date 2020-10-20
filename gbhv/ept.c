@@ -336,6 +336,7 @@ PEPT_PML1_ENTRY HvEptGetPml1Entry(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_
 
 	if(!PML1)
 	{
+		HvUtilLogError("Failed to get PML1 entry: Translating PA:%p to VA returned NULL.", PML2Pointer->PageFrameNumber * PAGE_SIZE);
 		return NULL;
 	}
 
@@ -362,6 +363,8 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	PEPT_PML2_ENTRY TargetEntry;
 	EPT_PML2_POINTER NewPointer;
 
+	HvUtilLog("Splitting large page @ PA:%p", PhysicalAddress);
+
 	/* Find the PML2 entry that's currently used*/
 	TargetEntry = HvEptGetPml2Entry(ProcessorContext, PhysicalAddress);
 	if(!TargetEntry)
@@ -378,8 +381,19 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 		return TRUE;
 	}
 
-	/* Allocate the PML1 entries */
-	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateNonpagedMemory(sizeof(VMM_EPT_DYNAMIC_SPLIT));
+	/*
+	* Allocate the PML1 entries for the split.
+	* NOTE: This would *not* need to use contiguous aligned pages normally, except for a bug which is experienced
+	* in Windows 10 v2004 where changes to the nonpaged pool allocator resulted in some page aligned allocations
+	* being mapped as 4MB large pages rather than the expected 4KB pages. This causes the following VtoP and PtoV
+	* functions to fail, because the Mm APIs are not able to properly translate physical addresses within a large page
+	* back to its virtual address due to a null PTE pointer inside the PFN database entry for the large page.
+	* 
+	* From my testing, I was unable to find a way to coerce Mm to split a nonpaged pool large page for me, so the best
+	* alternative was to use the contiguous aligned pages allocator because, in my testing, it resulted in only 4KB virtual
+	* allocations. This allocator also utilizes nonpaged pool frames, so it is more-or-less the same as the other allocator.
+	*/
+	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateContiguousAlignedPages(sizeof(VMM_EPT_DYNAMIC_SPLIT)/PAGE_SIZE);
 	if(!NewSplit)
 	{
 		HvUtilLogError("HvEptSplitLargePage: Failed to allocate dynamic split memory.\n");
@@ -418,6 +432,10 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	NewPointer.WriteAccess = 1;
 	NewPointer.ReadAccess = 1;
 	NewPointer.ExecuteAccess = 1;
+
+	/*
+	* Create an EPT pointer to the new PML2 entry we just created
+	*/
 	NewPointer.PageFrameNumber = (SIZE_T)OsVirtualToPhysical(&NewSplit->PML1[0]) / PAGE_SIZE;
 
 	/* Add our allocation to the linked list of dynamic splits for later deallocation */
@@ -538,7 +556,15 @@ BOOL HvEptLogicalProcessorInitialize(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 	/* We will write the EPTP to the VMCS later */
 	ProcessorContext->EptPointer.Flags = EPTP.Flags;
 
-	HvEptAddPageHook(ProcessorContext, (PVOID)NtCreateFile, (PVOID)NtCreateFileHook, (PVOID*)&NtCreateFileOrig);
+	/*
+	 * On each logical processor, create an EPT hook on NtCreateFile to intercept the system call.
+	 */
+	if (!HvEptAddPageHook(ProcessorContext, (PVOID)NtCreateFile, (PVOID)NtCreateFileHook, (PVOID*)&NtCreateFileOrig))
+	{
+		HvUtilLogError("Failed to build page hook for NtCreateFile");
+		HvEptFreeLogicalProcessorContext(ProcessorContext);
+		return FALSE;
+	}
 
 	return TRUE;
 }
