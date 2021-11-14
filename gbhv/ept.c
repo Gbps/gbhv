@@ -634,7 +634,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	OffsetIntoPage = ADDRMASK_EPT_PML1_OFFSET((SIZE_T)TargetFunction);
 	HvUtilLogDebug("OffsetIntoPage: 0x%llx\n", OffsetIntoPage);
 
-	if ((OffsetIntoPage + 13) > PAGE_SIZE-1)
+	if ((OffsetIntoPage + 14) > PAGE_SIZE-1)
 	{
 		HvUtilLogError("Function extends past a page boundary. We just don't have the technology to solve this.....\n");
 		return FALSE;
@@ -642,7 +642,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 
 	/* Determine the number of instructions necessary to overwrite using Length Disassembler Engine */
 	for(SizeOfHookedInstructions = 0; 
-		SizeOfHookedInstructions < 13; 
+		SizeOfHookedInstructions < 14; 
 		SizeOfHookedInstructions += LDE((PCHAR)TargetFunction + SizeOfHookedInstructions, 64))
 	{
 		// Get the full size of instructions necessary to copy
@@ -653,7 +653,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	/* Build a trampoline */
 	
 	/* Allocate some executable memory for the trampoline */
-	Hook->Trampoline = OsAllocateExecutableNonpagedMemory(SizeOfHookedInstructions + 13);
+	Hook->Trampoline = OsAllocateExecutableNonpagedMemory(SizeOfHookedInstructions + 14);
 
 	if (!Hook->Trampoline)
 	{
