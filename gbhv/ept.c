@@ -597,19 +597,32 @@ VOID HvEptFreeLogicalProcessorContext(PVMM_PROCESSOR_CONTEXT ProcessorContext)
 /* Write an absolute x64 jump to an arbitrary address to a buffer. */
 VOID HvEptHookWriteAbsoluteJump(PCHAR TargetBuffer, SIZE_T TargetAddress)
 {
-	/* mov r15, Target */
-	TargetBuffer[0] = 0x49;
-	TargetBuffer[1] = 0xBB;
+    /**
+     *   Use 'push ret' instead of 'jmp qword[rip+0]',
+     *   Because 'jmp qword[rip+0]' will read hooked page 8bytes.
+     *
+     *   14 bytes hook:
+     *   0x68 0x12345678 ......................push 'low 32bit of TargetAddress'
+     *   0xC7 0x44 0x24 0x04 0x12345678........mov dword[rsp + 4], 'high 32bit of TargetAddress'
+     *   0xC3..................................ret
+     */
 
-	/* Target */
-	*((PSIZE_T)&TargetBuffer[2]) = TargetAddress;
+    UINT32  Low32;
+    UINT32  High32;
 
-	/* push r15 */
-	TargetBuffer[10] = 0x41;
-	TargetBuffer[11] = 0x53;
+    Low32 = (UINT32)TargetAddress;
+    High32 = (UINT32)(TargetAddress >> 32);
 
-	/* ret */
-	TargetBuffer[12] = 0xC3;
+    /* push 'low 32bit of TargetAddress' */
+    TargetBuffer[0] = 0x68;
+    *((UINT32*)&TargetBuffer[1]) = Low32;
+
+    /* mov dword[rsp + 4], 'high 32bit of TargetAddress' */
+    *((UINT32*)&TargetBuffer[5]) = 0x042444C7;
+    *((UINT32*)&TargetBuffer[9]) = High32;
+
+    /* ret */
+    TargetBuffer[13] = 0xC3;
 }
 
 
@@ -621,7 +634,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	OffsetIntoPage = ADDRMASK_EPT_PML1_OFFSET((SIZE_T)TargetFunction);
 	HvUtilLogDebug("OffsetIntoPage: 0x%llx\n", OffsetIntoPage);
 
-	if ((OffsetIntoPage + 13) > PAGE_SIZE-1)
+	if ((OffsetIntoPage + 14) > PAGE_SIZE-1)
 	{
 		HvUtilLogError("Function extends past a page boundary. We just don't have the technology to solve this.....\n");
 		return FALSE;
@@ -629,8 +642,8 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 
 	/* Determine the number of instructions necessary to overwrite using Length Disassembler Engine */
 	for(SizeOfHookedInstructions = 0; 
-		SizeOfHookedInstructions < 13; 
-		SizeOfHookedInstructions += LDE(TargetFunction, 64))
+		SizeOfHookedInstructions < 14; 
+		SizeOfHookedInstructions += LDE((PCHAR)TargetFunction + SizeOfHookedInstructions, 64))
 	{
 		// Get the full size of instructions necessary to copy
 	}
@@ -640,7 +653,7 @@ BOOL HvEptHookInstructionMemory(PVMM_EPT_PAGE_HOOK Hook, PVOID TargetFunction, P
 	/* Build a trampoline */
 	
 	/* Allocate some executable memory for the trampoline */
-	Hook->Trampoline = OsAllocateExecutableNonpagedMemory(SizeOfHookedInstructions + 13);
+	Hook->Trampoline = OsAllocateExecutableNonpagedMemory(SizeOfHookedInstructions + 14);
 
 	if (!Hook->Trampoline)
 	{
