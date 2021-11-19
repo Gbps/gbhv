@@ -173,7 +173,7 @@ PVMM_EPT_PAGE_TABLE HvEptAllocateAndCreateIdentityPageTable(PVMM_CONTEXT GlobalC
 	SIZE_T EntryIndex;
 	
 	/* Allocate all paging structures as 4KB aligned pages */
-	PageTable = OsAllocateContiguousAlignedPages(sizeof(VMM_EPT_PAGE_TABLE) / PAGE_SIZE);
+	PageTable = OsAllocateContiguousAlignedPages(ALIGN_UP_BY(sizeof(VMM_EPT_PAGE_TABLE), PAGE_SIZE) / PAGE_SIZE);
 
 	if(PageTable == NULL)
 	{
@@ -393,7 +393,7 @@ BOOL HvEptSplitLargePage(PVMM_PROCESSOR_CONTEXT ProcessorContext, SIZE_T Physica
 	* alternative was to use the contiguous aligned pages allocator because, in my testing, it resulted in only 4KB virtual
 	* allocations. This allocator also utilizes nonpaged pool frames, so it is more-or-less the same as the other allocator.
 	*/
-	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateContiguousAlignedPages(sizeof(VMM_EPT_DYNAMIC_SPLIT)/PAGE_SIZE);
+	NewSplit = (PVMM_EPT_DYNAMIC_SPLIT) OsAllocateContiguousAlignedPages(ALIGN_UP_BY(sizeof(VMM_EPT_DYNAMIC_SPLIT), PAGE_SIZE) / PAGE_SIZE);
 	if(!NewSplit)
 	{
 		HvUtilLogError("HvEptSplitLargePage: Failed to allocate dynamic split memory.\n");
