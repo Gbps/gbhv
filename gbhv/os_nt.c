@@ -25,6 +25,7 @@ SIZE_T OsGetCurrentProcessorNumber()
 
 /*
  * Allocate a number of page-aligned, contiguous pages of memory and return a pointer to the region.
+ * When your data size is divided by PAGE_SIZE, you should be sure that no remainder is discarded.
  * 
  * Returns NULL if the pages could not be allocated.
  */
