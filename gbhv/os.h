@@ -7,6 +7,10 @@ SIZE_T OsGetCPUCount();
 
 SIZE_T OsGetCurrentProcessorNumber();
 
+/**
+ *  When your data size is divided by PAGE_SIZE, 
+ *  you should be sure that no remainder is discarded.
+ */
 PVOID OsAllocateContiguousAlignedPages(SIZE_T NumberOfPages);
 
 VOID OsFreeContiguousAlignedPages(PVOID PageRegionAddress);
