@@ -39,7 +39,10 @@ typedef struct _VMM_HOST_STACK_REGION
 	/*
 	 * Top of the host stack must always have a pointer to the global context.
 	 * This allows the exit handler to access the global context after the host area is loaded.
+	 * In order to follow the x64 calling convention, must ensure that the end of rsp is 8 after entering HOST.
+	 * So we need a 16-byte aligned member in front of GlobalContext.
 	 */
+	DECLSPEC_ALIGN(16) UINT64 Alignment;
 	PVMM_CONTEXT GlobalContext;
 
 } VMM_HOST_STACK_REGION, *PVMM_HOST_STACK_REGION;
